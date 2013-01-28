@@ -4,7 +4,7 @@ A clojure library wrapping the excellent BACnet4J library. Hopefully
 it will be able to abstract some of the ugly BACnet details
 (datatypes) and provide a seamless Clojure experience.
 
-Its main goal is to replace to awful hack that is [[https://github.com/Frozenlock/Bacnet-scan-utils][Bacnet-scan-utils]].
+Its main goal is to replace the awful hack that is [[https://github.com/Frozenlock/Bacnet-scan-utils][Bacnet-scan-utils]].
 
 ** Usage
 
