@@ -142,7 +142,7 @@
     key-or-num))
 
 (defn c-object-type
-  "Type can be either the integer"[object-type]
+  "Type can be either the integer or the keyword"[object-type]
   (ObjectType.
    (if (keyword? object-type)
      (if-let [[_ n] (re-find #"vendor-specific-(\d+)" (name object-type))]
@@ -150,9 +150,9 @@
        (get obj-int-map object-type))
      object-type)))
 
-  
 (defn c-object-identifier
-  "Make an object identifier."[object-identifier]
+  "Make an object identifier."
+  [object-identifier]
   (ObjectIdentifier.
    (c-object-type (:object-type object-identifier))
    (:instance object-identifier)))
@@ -180,6 +180,9 @@
 
 (defn c-unsigned [value]
   (UnsignedInteger. value))
+
+(defn c-signed [value]
+  (SignedInteger. value))
 
 (defn c-engineering-units [value]
   (EngineeringUnits. (map-or-num  engineering-units-map value)))
@@ -305,6 +308,10 @@
   (bacnet->clojure [^com.serotonin.bacnet4j.type.primitive.UnsignedInteger o]
     (.intValue o))
 
+  com.serotonin.bacnet4j.type.primitive.SignedInteger
+  (bacnet->clojure [^com.serotonin.bacnet4j.type.primitive.SignedInteger o]
+    (.intValue o))
+  
   com.serotonin.bacnet4j.type.enumerated.EngineeringUnits
   (bacnet->clojure [^EngineeringUnits o]
     (string-name-to-keyword o))

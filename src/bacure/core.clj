@@ -82,7 +82,7 @@ available in the metadata :config"
     (def ^{:config (mapify device-id broadcast-address port local-address)}
       local-device ld))) ;;store in metadata.. less messy then querying the local-device
 
-(new-local-device)
+;(new-local-device)
 ;create an initial local-device
 
 (defn initialize
@@ -111,6 +111,10 @@ available in the metadata :config"
                                (UnsignedInteger. max-range))
                               (WhoIsRequest.))))
 
+(defn local-objects
+  "Return a list of local objects"[]
+  (map coerce/bacnet->clojure
+       (.getLocalObjects local-device)))
 
 (defn local-device-backup
   "Spit all important information about the local device into a map." []
@@ -159,12 +163,6 @@ available in the metadata :config"
   "Remove all local object"[]
   (doseq [o (local-objects)]
     (remove-object o)))
-
-
-(defn object-name [device-id object-identifier]
-  (.sendReadPropertyAllowNull local-device (rd device-id)
-                              object-identifier
-                              com.serotonin.bacnet4j.type.enumerated.PropertyIdentifier/objectName))
 
 (defn reset-local-device
   "Terminate the local device and discard it. Replace it with a new
@@ -216,11 +214,10 @@ available in the metadata :config"
   (.getRemoteDevice local-device device-id))
 
 
-(defn local-objects
-  "Return a list of local objects"[]
-  (map coerce/bacnet->clojure
-       (.getLocalObjects local-device)))
-
+(defn object-name [device-id object-identifier]
+  (.sendReadPropertyAllowNull local-device (rd device-id)
+                              object-identifier
+                              com.serotonin.bacnet4j.type.enumerated.PropertyIdentifier/objectName))
 
 (defn get-remote-object-identifiers
   "Return a remote device's object identifiers (object-list) as a
