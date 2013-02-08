@@ -153,9 +153,10 @@
 (defn c-object-identifier
   "Make an object identifier."
   [object-identifier]
-  (ObjectIdentifier.
-   (c-object-type (:object-type object-identifier))
-   (:instance object-identifier)))
+  (let [m (first object-identifier)]
+    (ObjectIdentifier.
+     (c-object-type (key m))
+     (val m))))
 
 (defn c-real [value]
   (Real. (float value)))
@@ -287,8 +288,8 @@
 
   com.serotonin.bacnet4j.type.primitive.ObjectIdentifier
   (bacnet->clojure [^ObjectIdentifier o]
-    {:instance (.getInstanceNumber o)
-     :object-type (bacnet->clojure (.getObjectType o))})
+    {(keyword (bacnet->clojure (.getObjectType o)))
+     (.getInstanceNumber o)})
 
   com.serotonin.bacnet4j.type.enumerated.EventState
   (bacnet->clojure [^EventState o]
@@ -356,10 +357,7 @@
   
   com.serotonin.bacnet4j.type.constructed.SequenceOf
   (bacnet->clojure [^SequenceOf o]
-    (let [result (map bacnet->clojure o)]
-      (if (coll? (first result))
-        (into {} result)
-        (into [] result))))
+    (into [] (map bacnet->clojure o)))
 
   com.serotonin.bacnet4j.type.constructed.ServicesSupported
   (bacnet->clojure [^ServicesSupported o]
@@ -373,13 +371,12 @@
   (bacnet->clojure [^PropertyValues o]
     (into {}
           (for [p-ref o]
-            (let [value (bacnet->clojure (.getNullOnError
+            (when-let [value (bacnet->clojure (.getNullOnError
                                           o
                                           (.getObjectIdentifier p-ref)
                                           (.getPropertyIdentifier p-ref)))]
-              (when value ;; no need to keep properties with nil values
-                [(string-name-to-keyword (.getPropertyIdentifier p-ref))
-                 value])))))
+              [(string-name-to-keyword (.getPropertyIdentifier p-ref))
+               value]))))
 
   com.serotonin.bacnet4j.type.enumerated.PropertyIdentifier
   (bacnet->clojure [^PropertyIdentifier o]
@@ -392,9 +389,8 @@
       ;; Hopefully `bean' won't be much of a drag
       (into {}
             (for [p-id properties-id]
-              (let [prop-value (bacnet->clojure (.getProperty o p-id))]
-                (when prop-value ;; don't bother if the property value is nil
-                  [(bacnet->clojure p-id) prop-value]))))))
+              (when-let [prop-value (bacnet->clojure (.getProperty o p-id))]
+                [(bacnet->clojure p-id) prop-value])))))
 
   com.serotonin.bacnet4j.type.constructed.ObjectTypesSupported
   (bacnet->clojure [^ObjectTypesSupported o]
@@ -434,7 +430,7 @@
 
 
 (def test-device
-  {:object-identifier {:object-type :analog-input :instance 1}
+  {:object-identifier {:analog-input 1}
    :present-value 12
    :description "Test analog input"
    :device-type "Test device"
@@ -474,7 +470,7 @@
  :reliability :communication-failure,
  :event-state :normal,
  :out-of-service false,
- :object-identifier {:instance 1, :object-type :analog-input},
+ :object-identifier {:analog-input 1},
  :description "ANALOG INPUT 1",
  :deadband 0.0})
 

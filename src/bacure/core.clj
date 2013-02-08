@@ -4,47 +4,48 @@
 
 (import '(com.serotonin.bacnet4j 
           LocalDevice 
-          RemoteDevice 
-          service.acknowledgement.AcknowledgementService 
-          service.acknowledgement.CreateObjectAck
-          service.acknowledgement.ReadPropertyAck
-          service.acknowledgement.ReadRangeAck
-          service.confirmed.ConfirmedRequestService
-          service.confirmed.CreateObjectRequest
-          service.confirmed.DeleteObjectRequest
-          service.confirmed.ReadPropertyConditionalRequest
-          service.confirmed.ReadPropertyMultipleRequest
-          service.confirmed.ReadPropertyRequest
-          service.confirmed.WritePropertyMultipleRequest
-          service.confirmed.WritePropertyRequest
-          service.confirmed.ReinitializeDeviceRequest
-          service.confirmed.AtomicReadFileRequest
-          service.confirmed.ReadRangeRequest
-          service.unconfirmed.WhoIsRequest
-          type.constructed.Address
-          type.constructed.Destination
-          type.constructed.EventTransitionBits
-          type.constructed.PriorityArray
-          type.constructed.PropertyReference
-          type.constructed.PropertyValue
-          type.constructed.ReadAccessSpecification
-          type.constructed.Recipient
-          type.constructed.SequenceOf
-          type.constructed.WriteAccessSpecification
-          type.constructed.DateTime
-          type.constructed.TimeStamp
-          type.enumerated.EngineeringUnits
-          type.enumerated.ObjectType
-          type.enumerated.PropertyIdentifier
-          type.enumerated.Segmentation
-          type.primitive.CharacterString
-          type.primitive.ObjectIdentifier
-          type.primitive.Real
-          type.primitive.UnsignedInteger
-          type.primitive.SignedInteger
-          type.primitive.Date
-          type.primitive.Time
-          util.PropertyReferences
+          RemoteDevice
+          obj.BACnetObject
+          ;; service.acknowledgement.AcknowledgementService 
+          ;; service.acknowledgement.CreateObjectAck
+          ;; service.acknowledgement.ReadPropertyAck
+          ;; service.acknowledgement.ReadRangeAck
+          ;; service.confirmed.ConfirmedRequestService
+           service.confirmed.CreateObjectRequest
+           service.confirmed.DeleteObjectRequest
+          ;; service.confirmed.ReadPropertyConditionalRequest
+          ;; service.confirmed.ReadPropertyMultipleRequest
+          ;; service.confirmed.ReadPropertyRequest
+          ;; service.confirmed.WritePropertyMultipleRequest
+          ;; service.confirmed.WritePropertyRequest
+          ;; service.confirmed.ReinitializeDeviceRequest
+          ;; service.confirmed.AtomicReadFileRequest
+          ;; service.confirmed.ReadRangeRequest
+            service.unconfirmed.WhoIsRequest
+          ;; type.constructed.Address
+          ;; type.constructed.Destination
+          ;; type.constructed.EventTransitionBits
+          ;; type.constructed.PriorityArray
+          ;; type.constructed.PropertyReference
+          ;; type.constructed.PropertyValue
+          ;; type.constructed.ReadAccessSpecification
+          ;; type.constructed.Recipient
+          ;; type.constructed.SequenceOf
+          ;; type.constructed.WriteAccessSpecification
+          ;; type.constructed.DateTime
+          ;; type.constructed.TimeStamp
+          ;; type.enumerated.EngineeringUnits
+          ;; type.enumerated.ObjectType
+           type.enumerated.PropertyIdentifier
+          ;; type.enumerated.Segmentation
+          ;; type.primitive.CharacterString
+          ;; type.primitive.ObjectIdentifier
+          ;; type.primitive.Real
+            type.primitive.UnsignedInteger
+          ;; type.primitive.SignedInteger
+          ;; type.primitive.Date
+          ;; type.primitive.Time
+          ;; util.PropertyReferences
           ))
 
 (defmacro mapify
@@ -128,18 +129,12 @@ available in the metadata :config"
 ;; eventually we should be able to add programs in the local device
 
 
-(defn object-identifier
-  "Make an object identifier from an object map"
-  [&[{:keys [object-identifier]}]]
-  (coerce/c-object-identifier object-identifier))
-
-
 (defn add-object
   "Add a local object and return it."
   [object-map]
-  (let [object-id (object-identifier object-map)]
+  (let [object-id (coerce/c-object-identifier (:object-identifier object-map))]
     (try (.addObject local-device
-                     (com.serotonin.bacnet4j.obj.BACnetObject. local-device object-id))
+                     (BACnetObject. local-device object-id))
          (catch Exception e (print (str "caught exception: " (.getMessage e)))))
     (.getObject local-device object-id)))
   
@@ -147,7 +142,7 @@ available in the metadata :config"
   "Update a local object properties. Create the object it if not
   already present. Will not try to modify any :object-type
   or :object-identifier." [object-map]
-  (let [object-id (object-identifier object-map)
+  (let [object-id (coerce/c-object-identifier (:object-identifier object-map))
         b-obj (or (.getObject local-device object-id) (add-object object-map))]
     (doseq [prop (coerce/encode-properties object-map :object-identifier :object-type)]
       (.setProperty b-obj prop))
@@ -157,7 +152,7 @@ available in the metadata :config"
 (defn remove-object
   "Remove a local object"
   [object-map]
-  (.removeObject local-device (object-identifier object-map)))
+  (.removeObject local-device (coerce/c-object-identifier (:object-identifier object-map))))
 
 (defn flush-objects
   "Remove all local object"[]
@@ -187,8 +182,6 @@ available in the metadata :config"
       (add-or-update-object o))))
 
 
-
-
 (defn get-remote-devices-and-info
   "Given a local device, sends a WhoIs. For every device discovered,
   get its extended information. Return the remote devices as a list."
@@ -214,47 +207,47 @@ available in the metadata :config"
   (.getRemoteDevice local-device device-id))
 
 
-(defn object-name [device-id object-identifier]
-  (.sendReadPropertyAllowNull local-device (rd device-id)
-                              object-identifier
-                              com.serotonin.bacnet4j.type.enumerated.PropertyIdentifier/objectName))
-
-(defn get-remote-object-identifiers
-  "Return a remote device's object identifiers (object-list) as a
-  sequence."
-  [device-id]
-  (let [remote-device (rd device-id)]
-    (seq (.getValues (.sendReadPropertyAllowNull
-                      local-device remote-device
-                      (.getObjectIdentifier remote-device)
-                      PropertyIdentifier/objectList)))))
-
-
 ;;;;;;;;;;;;;;;
 
-(defn add-remote-object [device-id object-map]
+(defn add-remote-object
+  "Send a 'create object request' to the remote device."
+  [device-id object-map]
   (.send local-device (rd device-id)
-         (CreateObjectRequest. (object-identifier object-map)
-                               (coerce/encode-properties object-map :object-type :object-identifier))))
+         (CreateObjectRequest. (coerce/c-object-identifier (:object-identifier object-map))
+                               (coerce/encode-properties object-map :object-type :object-identifier
+                                                         :object-list))))
 
 
-(defn object-properties-values [device-id object-identifier]
-  (let [refs (com.serotonin.bacnet4j.util.PropertyReferences.)]
-    (.add refs object-identifier com.serotonin.bacnet4j.type.enumerated.PropertyIdentifier/all)
-    (.readProperties local-device (rd device-id) refs)))
+(defn get-device-id
+  "Find the device id when given a list of object-map"[objects-map]
+  (-> (filter (where {:object-identifier :device}) objects-map)
+      first
+      :instance))
 
+(defn object-properties-values
+  "Query a remote device and return the properties values
+   Example: (object-properties-values 1234 {:object-type :analog-input :instance 0} :all)
+   -> {:notification-class 4194303, :event-enable .....}"
+  [device-id object-identifier & properties]
+  (let [oid (coerce/c-object-identifier object-identifier)
+        refs (com.serotonin.bacnet4j.util.PropertyReferences.)
+        prop-identifiers (map #(coerce/make-property-identifier %) properties)]
+    (doseq [prop-id prop-identifiers]
+      (.add refs oid prop-id))
+    (coerce/bacnet->clojure (.readProperties local-device (rd device-id) refs))))
 
-(defn get-values
-  "Return a map of every properties and their associated values."
-  [device-id object-identifier]
-  (coerce/bacnet->clojure (object-properties-values device-id object-identifier)))
+(defn remote-objects
+  "Return a map of every objects in the remote device.
+   -> {:object-list [{:device 1234} {:analog-input 0}...]}"
+  [device-id]
+  (object-properties-values device-id {:device device-id} :object-list))
 
 (defn set-properties
-  "Set all the properties present in the map."
+  "Set all the given objects properties in the remote device."
   [device-id properties-map]
   (let [remote-device (rd device-id)
         encoded-properties (coerce/encode-properties properties-map)
         object-identifier (:object-identifier encoded-properties)]
-    (for [prop (dissoc encoded-properties :object-identifier :object-type)]
+    (for [prop (dissoc encoded-properties :object-identifier :object-type :object-list)]
       (let [prop-id (coerce/make-property-identifier (key prop))]
         (.setProperty local-device remote-device object-identifier prop-id (val prop))))))
