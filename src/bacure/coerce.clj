@@ -24,8 +24,10 @@
             type.constructed.Address
             type.constructed.BACnetError
             type.constructed.Destination
+            type.constructed.DeviceObjectPropertyReference
             type.constructed.EventTransitionBits            
             type.constructed.PriorityArray
+            type.constructed.PriorityValue
             type.constructed.PropertyReference
             type.constructed.PropertyValue            
             type.constructed.LimitEnable
@@ -37,6 +39,7 @@
             type.constructed.ObjectTypesSupported
             type.constructed.TimeStamp
             type.constructed.StatusFlags
+            type.constructed.ShedLevel
             type.enumerated.EngineeringUnits            
             type.enumerated.EventState
             type.enumerated.NotifyType
@@ -107,22 +110,22 @@
 (def reliability-map
   "The .toString method doesn't return the name, but instead the
   string version of an integer. Thus we have to hardcode the names."
-  {:communication-failure 0
-   :configuration-error 2
-   :multi-state-fault 3
-   :no-fault-detected 4
-   :no-output 5
-   :no-sensor 6
-   :open-loop 7
-   :over-range 8
-   :process-error 9
-   :shorted-loop 10
-   :under-range 11
-   :unreliable-other 12})
+  {:communication-failure 12
+   :configuration-error 10
+   :multi-state-fault 9
+   :no-fault-detected 0
+   :no-output 6
+   :no-sensor 1
+   :open-loop 4
+   :over-range 2
+   :process-error 8
+   :shorted-loop 5
+   :under-range 3
+   :unreliable-other 7})
 
 
 (defn bean-map
-  "Create a clojure map using `bean' and remove non-wanted info"
+  "Create a clojure map using `bean' and remove unwanted info"
   [java-object]
   (let [m (dissoc (bean java-object) :class :value)]
     (into {}
@@ -338,6 +341,13 @@
      (clj-time.format/formatters :date-time)
      (clj-time.coerce/from-long (.getTimeMillis o))))
 
+  com.serotonin.bacnet4j.type.constructed.DeviceObjectPropertyReference
+  (bacnet->clojure [^DeviceObjectPropertyReference o]
+    {:device-identifier (bacnet->clojure (.getDeviceIdentifier o))
+     :object-identifier (bacnet->clojure (.getObjectIdentifier o))
+     :property-array-index (bacnet->clojure (.getPropertyArrayIndex o))
+     :property-identifier (bacnet->clojure (.getPropertyIdentifier o))})
+    
   com.serotonin.bacnet4j.type.primitive.Date ;; bastard format...
   (bacnet->clojure [^Date o]
     (clj-time.format/unparse
@@ -363,9 +373,18 @@
   (bacnet->clojure [^ServicesSupported o]
     (bean-map o))
 
+  com.serotonin.bacnet4j.type.constructed.PriorityValue
+  (bacnet->clojure [^PriorityValue o]
+    (.getIntegerValue o))
+  
   com.serotonin.bacnet4j.type.constructed.PropertyValue
   (bacnet->clojure [^PropertyValue o]
     (into [] (map bacnet->clojure [(.getPropertyIdentifier o)(.getValue o)])))
+
+  com.serotonin.bacnet4j.type.constructed.ShedLevel
+  (bacnet->clojure [^ShedLevel o]
+    (bacnet->clojure (.getPercent o)))
+  
   
   com.serotonin.bacnet4j.util.PropertyValues
   (bacnet->clojure [^PropertyValues o]
@@ -514,5 +533,5 @@
   "Encode an object map into a sequence of bacnet4j property-values.
   Remove-keys can be used to remove read-only properties before
   sending a command." [obj-map & remove-keys]
-  (let [encoded-values-map (apply dissoc `(~(encode obj-map) ~@remove-keys))]
+  (let [encoded-values-map (-> (dissoc obj-map remove-keys) encode)]
     (c-array #(c-property-value (make-property-identifier (key %)) (val %)) encoded-values-map)))
