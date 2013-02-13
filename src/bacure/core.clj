@@ -201,7 +201,7 @@ available in the metadata :config"
          (add-or-update-object o)))))
 
 
-(defn find-remote-devices-and-services-supported
+(defn find-remote-devices-and-extended-information
   "Given a local device, sends a WhoIs. For every device discovered,
   get its extended information. Return the remote devices as a list."
   [&[{:keys [min-range max-range dest-port] :as args}]]
@@ -218,7 +218,7 @@ available in the metadata :config"
   "Create a local-device, initialize it, and find the remote devices." []
   (new-local-device)
   (initialize)
-  (future (find-remote-devices-and-services-supported))
+  (future (find-remote-devices-and-extended-information))
   true) ; in another thread
 
 
@@ -229,12 +229,16 @@ available in the metadata :config"
   (for [rd (seq (.getRemoteDevices @local-device))]
     (.getInstanceNumber rd)))
 
-
 (defn rd
   "Get the remote device by its device-id"
   [device-id]
   (.getRemoteDevice @local-device device-id))
 
+(defn remote-devices-and-names
+  "Return a list of vector pair with the device-id and its name.
+   -->  ([1234 \"SimpleServer\"])" []
+  (for [d (remote-devices)]
+    [d (.getName (rd d))]))
 
 ;;;;;;;;;;;;;;;
 
