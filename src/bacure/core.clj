@@ -257,15 +257,15 @@ available in the metadata :config"
          (DeleteObjectRequest. (coerce/c-object-identifier object-identifier))))
   
 
-(defn get-device-id
-  "Find the device id when given a list of object-map"[objects-map]
-  (-> (filter (where {:object-identifier :device}) objects-map)
-      first
-      :instance))
+;; (defn get-device-id
+;;   "Find the device id when given a list of object-map"[objects-map]
+;;   (-> (filter (where {:object-identifier :device}) objects-map)
+;;       first
+;;       :instance))
 
 (defn object-properties-values
   "Query a remote device and return the properties values
-   Example: (object-properties-values 1234 {:object-type :analog-input :instance 0} :all)
+   Example: (object-properties-values 1234 [:analog-input 0] :all)
    -> {:notification-class 4194303, :event-enable .....}"
   [device-id object-identifier & properties]
   (let [oid (coerce/c-object-identifier object-identifier)
@@ -277,9 +277,9 @@ available in the metadata :config"
 
 (defn remote-objects
   "Return a map of every objects in the remote device.
-   -> [{:device 1234} {:analog-input 0}...]"
+   -> [[:device 1234] [:analog-input 0]...]"
   [device-id]
-  (-> (object-properties-values device-id {:device device-id} :object-list)
+  (-> (object-properties-values device-id [:device device-id] :object-list)
       :object-list))
 
 (defn remote-objects-full-properties

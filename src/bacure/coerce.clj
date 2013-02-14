@@ -156,10 +156,9 @@
 (defn c-object-identifier
   "Make an object identifier."
   [object-identifier]
-  (let [m (first object-identifier)]
     (ObjectIdentifier.
-     (c-object-type (key m))
-     (val m))))
+     (c-object-type (first object-identifier))
+     (last object-identifier)))
 
 (defn c-real [value]
   (Real. (float value)))
@@ -291,8 +290,8 @@
 
   com.serotonin.bacnet4j.type.primitive.ObjectIdentifier
   (bacnet->clojure [^ObjectIdentifier o]
-    {(keyword (bacnet->clojure (.getObjectType o)))
-     (.getInstanceNumber o)})
+    [(keyword (bacnet->clojure (.getObjectType o)))
+     (.getInstanceNumber o)])
 
   com.serotonin.bacnet4j.type.enumerated.EventState
   (bacnet->clojure [^EventState o]
@@ -449,13 +448,13 @@
 
 
 (def test-device
-  {:object-identifier {:analog-input 1}
+  {:object-identifier [:analog-input 1]
    :present-value 12
    :description "Test analog input"
    :device-type "Test device"
    :units :degrees-celsius
    :reliability :no-fault-detected
-   :object-type :analog-input ;; yup, redundant information with object-identifier... bad architecture IMO
+   :object-type :analog-input ;; yup, redundant information with object-identifier... 
    :status-flags {:in-alarm true, :fault false, :out-of-service true, :overridden false}
    :event-time-stamps ["2012-11-25T23:41:42.499Z" "2012-11-25T23:41:42.499Z" "2012-11-25T23:41:42.499Z"]})
 
@@ -489,7 +488,7 @@
  :reliability :communication-failure,
  :event-state :normal,
  :out-of-service false,
- :object-identifier {:analog-input 1},
+ :object-identifier [:analog-input 1],
  :description "ANALOG INPUT 1",
  :deadband 0.0})
 
