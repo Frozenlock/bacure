@@ -447,7 +447,7 @@
                 [property-name encoded-value]))))))
 
 
-(def test-device
+(def test-object
   {:object-identifier [:analog-input 1]
    :present-value 12
    :description "Test analog input"
@@ -458,7 +458,7 @@
    :status-flags {:in-alarm true, :fault false, :out-of-service true, :overridden false}
    :event-time-stamps ["2012-11-25T23:41:42.499Z" "2012-11-25T23:41:42.499Z" "2012-11-25T23:41:42.499Z"]})
 
-(def test-device-2
+(def test-object-2
   {:notification-class 4194303,
  :event-enable
  {:to-normal false, :to-fault false, :to-off-normal false},

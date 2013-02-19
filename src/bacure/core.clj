@@ -1,52 +1,17 @@
 (ns bacure.core
   (:require [bacure.network :as network]
-            [bacure.coerce :as coerce]))
+            [bacure.coerce :as coerce]
+            [bacure.local-save :as save]))
 
 (import '(com.serotonin.bacnet4j 
           LocalDevice 
           RemoteDevice
           obj.BACnetObject
-          ;; service.acknowledgement.AcknowledgementService 
-          ;; service.acknowledgement.CreateObjectAck
-          ;; service.acknowledgement.ReadPropertyAck
-          ;; service.acknowledgement.ReadRangeAck
-          ;; service.confirmed.ConfirmedRequestService
-           service.confirmed.CreateObjectRequest
-           service.confirmed.DeleteObjectRequest
-          ;; service.confirmed.ReadPropertyConditionalRequest
-          ;; service.confirmed.ReadPropertyMultipleRequest
-          ;; service.confirmed.ReadPropertyRequest
-          ;; service.confirmed.WritePropertyMultipleRequest
-          ;; service.confirmed.WritePropertyRequest
-          ;; service.confirmed.ReinitializeDeviceRequest
-          ;; service.confirmed.AtomicReadFileRequest
-          ;; service.confirmed.ReadRangeRequest
-            service.unconfirmed.WhoIsRequest
-          ;; type.constructed.Address
-          ;; type.constructed.Destination
-          ;; type.constructed.EventTransitionBits
-          ;; type.constructed.PriorityArray
-          ;; type.constructed.PropertyReference
-          ;; type.constructed.PropertyValue
-          ;; type.constructed.ReadAccessSpecification
-          ;; type.constructed.Recipient
-          ;; type.constructed.SequenceOf
-          ;; type.constructed.WriteAccessSpecification
-          ;; type.constructed.DateTime
-          ;; type.constructed.TimeStamp
-          ;; type.enumerated.EngineeringUnits
-          ;; type.enumerated.ObjectType
-           type.enumerated.PropertyIdentifier
-          ;; type.enumerated.Segmentation
-          ;; type.primitive.CharacterString
-          ;; type.primitive.ObjectIdentifier
-          ;; type.primitive.Real
-            type.primitive.UnsignedInteger
-          ;; type.primitive.SignedInteger
-          ;; type.primitive.Date
-          ;; type.primitive.Time
-          ;; util.PropertyReferences
-          ))
+          service.confirmed.CreateObjectRequest
+          service.confirmed.DeleteObjectRequest
+          service.unconfirmed.WhoIsRequest
+          type.enumerated.PropertyIdentifier
+          type.primitive.UnsignedInteger))
 
 (defmacro mapify
   "Given some symbols, construct a map with the symbols as keys, and
@@ -78,20 +43,23 @@
   "Return a new configured BACnet local device . (A device is required
 to communicate over the BACnet network.). To terminate it, use the
 java method `terminate'. If needed, the initial configurations are
-available in the metadata :config"
+available in the atom 'local-device-configs."
   ([] (new-local-device nil))
   ([configs-map]
-     (let [{:keys [device-id broadcast-address port local-address timeout]
+     (let [{:keys [device-id broadcast-address port destination-port local-address timeout]
             :or {device-id 1338 ;;some default configs
                  broadcast-address (network/get-broadcast-address (network/get-ip))
                  port 47808
-                 timeout 20000}}
+                 destination-port 47808
+                 timeout 10000}}
            configs-map
            ld (LocalDevice. device-id broadcast-address local-address)]
        (.setPort ld port)
        (.setTimeout ld timeout) ;; increase the default to 20s
        (reset! local-device ld)
-       (reset! local-device-configs (mapify device-id broadcast-address port local-address timeout)))))
+       (reset! local-device-configs (mapify device-id broadcast-address port
+                                            destination-port local-address timeout))
+       ld)))
 
 
 
@@ -107,13 +75,6 @@ available in the metadata :config"
   (try (.terminate @local-device)
        (catch Exception e))) ;if the device isn't initialized, it will throw an error
 
-
-;; (def ^:dynamic *destination-port*
-;;   "The remote device destination port. The default BACnet port is
-;;   47808, but there is no guarantee it will always be the port
-;;   used. In fact it won't if the BACnet network is big enough."
-;;   47808)
-
 (defn find-remote-devices
   "We find remote devices by sending a 'WhoIs' broadcast. Every device
   that responds is added to the remote-devices field in the
@@ -122,7 +83,7 @@ available in the metadata :config"
   remote device discovery might fail. The use of
   `find-remote-devices-and-services-supported' is highly recommended, even if it
   might take a little longer to execute."
-  [&[{:keys [min-range max-range dest-port] :or {dest-port 47808}}]]
+  [&[{:keys [min-range max-range dest-port] :or {dest-port (:destination-port @local-device-configs)}}]]
   (.sendBroadcast @local-device
                   dest-port (if (or min-range max-range)
                               (WhoIsRequest.
@@ -133,23 +94,11 @@ available in the metadata :config"
 
 (defn local-objects
   "Return a list of local objects"[]
-  (map coerce/bacnet->clojure
-       (.getLocalObjects @local-device)))
-
-(defn local-device-backup
-  "Spit all important information about the local device into a map." []
-  (merge @local-device-configs
-         {:objects (local-objects)
-          :port (.getPort @local-device)
-          :retries (.getRetries @local-device)
-          :seg-timeout (.getSegTimeout @local-device)
-          :seg-window (.getSegWindow @local-device)
-          :timeout (.getTimeout @local-device)}))
-;; eventually we should be able to add programs in the local device
-
+  (mapv coerce/bacnet->clojure
+        (.getLocalObjects @local-device)))
 
 (defn add-object
-  "Add a local object and return it."
+  "Add a local object and return it. You should probably just use `add-or-update-object'."
   [object-map]
   (let [object-id (coerce/c-object-identifier (:object-identifier object-map))]
     (try (.addObject @local-device
@@ -173,32 +122,62 @@ available in the metadata :config"
   [object-map]
   (.removeObject @local-device (coerce/c-object-identifier (:object-identifier object-map))))
 
-(defn flush-objects
+(defn remove-all-objects
   "Remove all local object"[]
   (doseq [o (local-objects)]
     (remove-object o)))
 
+(defn local-device-backup
+  "Spit all important information about the local device into a map." []
+  (merge @local-device-configs
+         (when @local-device
+           {:objects (local-objects)
+            :port (.getPort @local-device)
+            :retries (.getRetries @local-device)
+            :seg-timeout (.getSegTimeout @local-device)
+            :seg-window (.getSegWindow @local-device)
+            :timeout (.getTimeout @local-device)})))
+;; eventually we should be able to add programs in the local device
+
 (defn reset-local-device
   "Terminate the local device and discard it. Replace it with a new
   local device, and apply the same configurations as the previous one.
-  If a map with new configurations is provided, it will be merge with
+  If a map with new configurations is provided, it will be merged with
   the old config.
 
   (reset-local-device {:device-id 1112})
   ---> reset the device and change the device id."
   ([] (reset-local-device nil))
   ([new-config]
-     (let [configs (merge (local-device-backup) new-config)]
-       (terminate)
-       (new-local-device configs)
+     (terminate)
+     (new-local-device (merge (local-device-backup) new-config))
+     (let [configs (local-device-backup)]
        (doto @local-device
          (.setRetries (:retries configs))
          (.setSegTimeout (:seg-timeout configs))
          (.setSegWindow (:seg-window configs))
          (.setTimeout (:timeout configs)))
        (initialize)
-       (doseq [o (:objects configs)]
+       (doseq [o (or (:objects configs) [])]
          (add-or-update-object o)))))
+
+(defn clear-all!
+  "Mostly a development function; Destroy all traces of a local-device."[]
+  (terminate)
+  (def local-device (atom nil))
+  (def local-device-configs (atom {})))
+
+
+(defn save-local-device-backup
+  "Save the device backup on a local file and return the config map."[]
+  (save/save-configs (local-device-backup)))
+;; eventually it would be nice to implement the BACnet backup procedure.
+
+
+(defn load-local-device-backup
+  "Load the local-device backup file and reset it with this new configuration."
+  []
+  (reset-local-device (save/get-configs)))
 
 
 (defn find-remote-devices-and-extended-information
@@ -206,7 +185,7 @@ available in the metadata :config"
   get its extended information. Return the remote devices as a list."
   [&[{:keys [min-range max-range dest-port] :as args}]]
   (find-remote-devices args)
-  (Thread/sleep 700) ;wait a little to insure we get the responses
+  (Thread/sleep 500) ;wait a little to insure we get the responses
   (let [rds (-> @local-device (.getRemoteDevices))]
     (doseq [remote-device rds]
       (-> @local-device (.getExtendedDeviceInformation remote-device)))
@@ -214,18 +193,19 @@ available in the metadata :config"
       (.getInstanceNumber rd))))
 
 
-(defn- easy-boot
-  "Create a local-device, initialize it, and find the remote devices." []
-  (new-local-device)
-  (initialize)
-  (future (find-remote-devices-and-extended-information))
+(defn boot-up
+  "Create a local-device, load its config file, initialize it, and find the remote devices." []
+  (load-local-device-backup)
+  (future (dorun
+           (->> (repeatedly 5 find-remote-devices-and-extended-information);;try up to 5 time
+                (take-while empty?))))
   true) ; in another thread
 
 
 (defn remote-devices
   "Return the list of the current remote devices. These devices must
   be in the local table. To scan a network, use
-  `find-remote-devices'" []
+  `find-remote-devices-and-extended-information'." []
   (for [rd (seq (.getRemoteDevices @local-device))]
     (.getInstanceNumber rd)))
 
