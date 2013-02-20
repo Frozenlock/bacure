@@ -389,12 +389,11 @@
   (bacnet->clojure [^PropertyValues o]
     (into {}
           (for [p-ref o]
-            (when-let [value (bacnet->clojure (.getNullOnError
+            (let [value (bacnet->clojure (.getNullOnError
                                           o
                                           (.getObjectIdentifier p-ref)
                                           (.getPropertyIdentifier p-ref)))]
-              [(string-name-to-keyword (.getPropertyIdentifier p-ref))
-               value]))))
+              [(string-name-to-keyword (.getPropertyIdentifier p-ref)) value]))))
 
   com.serotonin.bacnet4j.type.enumerated.PropertyIdentifier
   (bacnet->clojure [^PropertyIdentifier o]

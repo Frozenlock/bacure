@@ -26,13 +26,6 @@
                         (for [item symbols]
                           [(keyword item) item])))))
 
-
-(defn where
-  "Use with `filter'"
-  [criteria]
-    (fn [m]
-      (every? (fn [[k v]] (= (k m) v)) criteria)))
-
 ;; ================
 
 
@@ -196,10 +189,10 @@ available in the atom 'local-device-configs."
 (defn boot-up
   "Create a local-device, load its config file, initialize it, and find the remote devices." []
   (load-local-device-backup)
-  (future (dorun
+  (future (dorun ; in another thread
            (->> (repeatedly 5 find-remote-devices-and-extended-information);;try up to 5 time
                 (take-while empty?))))
-  true) ; in another thread
+  true)
 
 
 (defn remote-devices
@@ -220,7 +213,12 @@ available in the atom 'local-device-configs."
   (for [d (remote-devices)]
     [d (.getName (rd d))]))
 
-;;;;;;;;;;;;;;;
+
+
+;; ================================================================
+;; Remote objects related functions
+;; ================================================================
+
 
 (defn create-remote-object
   "Send a 'create object request' to the remote device."
@@ -237,35 +235,42 @@ available in the atom 'local-device-configs."
          (DeleteObjectRequest. (coerce/c-object-identifier object-identifier))))
   
 
-;; (defn get-device-id
-;;   "Find the device id when given a list of object-map"[objects-map]
-;;   (-> (filter (where {:object-identifier :device}) objects-map)
-;;       first
-;;       :instance))
-
-(defn object-properties-values
+(defn object-properties-values-with-nil
   "Query a remote device and return the properties values
-   Example: (object-properties-values 1234 [:analog-input 0] :all)
-   -> {:notification-class 4194303, :event-enable .....}"
-  [device-id object-identifier & properties]
+   Example: (object-properties-values 1234 [:analog-input 0] [:all])
+   -> {:notification-class 4194303, :event-enable .....}
+
+   You probably want to use `object-properties-values'."
+  [device-id object-identifier coll-properties]
   (let [oid (coerce/c-object-identifier object-identifier)
         refs (com.serotonin.bacnet4j.util.PropertyReferences.)
-        prop-identifiers (map #(coerce/make-property-identifier %) properties)]
+        prop-identifiers (map #(coerce/make-property-identifier %) coll-properties)]
     (doseq [prop-id prop-identifiers]
       (.add refs oid prop-id))
     (coerce/bacnet->clojure (.readProperties @local-device (rd device-id) refs))))
+
+(defn object-properties-values
+  "Query a remote device and return the properties values
+   Example: (object-properties-values 1234 [:analog-input 0] [:all])
+   -> {:notification-class 4194303, :event-enable .....}
+
+   Discards any properties with a `nil' value (property not found in object)."
+  [device-id object-identifier coll-properties]
+  (->> (object-properties-values-with-nil device-id object-identifier coll-properties)
+       (remove #(nil? (val %)))
+       (into {})))
 
 (defn remote-objects
   "Return a map of every objects in the remote device.
    -> [[:device 1234] [:analog-input 0]...]"
   [device-id]
-  (-> (object-properties-values device-id [:device device-id] :object-list)
+  (-> (object-properties-values device-id [:device device-id] [:object-list])
       :object-list))
 
-(defn remote-objects-full-properties
+(defn remote-objects-all-properties
   "Return a list of maps of every objects and their properties."
   [device-id]
-  (map #(object-properties-values device-id % :all) (remote-objects device-id)))
+  (map #(object-properties-values device-id % [:all]) (remote-objects device-id)))
 
 (defn set-remote-properties
   "Set all the given objects properties in the remote device."
@@ -277,3 +282,95 @@ available in the atom 'local-device-configs."
                     (:object-identifier encoded-properties)
                     (coerce/make-property-identifier (key prop))
                     (val prop)))))
+
+
+
+;; ================================================================
+;; Filtering and querying functions
+;; ================================================================
+
+
+(defn get-properties-incrementally
+  "Return a lazy list of increasingly bigger object-map (collection of properties).
+   Interesting value would be the `last', as it would contain all the properties.
+
+   Each property is requested individually, which requires a higher
+   traffic on the network. However, it also enables us to stop a query
+   if one of the properties values isn't what we wished. Useful if we
+   want to find devices with particular properties.
+
+   A typical use would be with `take-while'. If the predicate fails,
+   any unfetched properties will just be dropped, saving some traffic
+   on the network. Can quickly become advantageous if we query a large
+   number of devices."
+  [remote-device object-identifier coll-properties]
+  (let [object-map {:object-identifier object-identifier};construct an initial object-map
+        get-prop  (fn [o p]
+                    (merge o
+                           (object-properties-values-with-nil remote-device (:object-identifier o) [p])))]
+    (reductions get-prop object-map coll-properties)))
+
+
+(defn- where*
+  [criteria not-found-result]
+    (fn [m]
+      (every? (fn [[k v]]
+                (let [tested-value (get m k :not-found)]
+                  (cond
+                   (= tested-value :not-found) not-found-result
+                   (and (fn? v) tested-value) (v tested-value)
+                   (number? tested-value) (== tested-value v)
+                   (= (class v) java.util.regex.Pattern) (re-find v tested-value)
+                   (= tested-value v) :pass))) criteria)))
+
+(defn where
+  "Will test with criteria map as a predicate. If the value of a
+  key-val pair is a function, use it as a predicate. If the tested map
+  value is not found, fail.
+
+  For example:
+  Criteria map:  {:a #(> % 10) :b \"foo\"}
+  Tested-maps  {:a 20 :b \"foo\"}  success
+               {:b \"foo\"}        fail
+               {:a nil :b \"foo\"} fail"
+  [criteria]
+  (where* criteria false))
+
+
+(defn where-or-not-found
+  "Will test with criteria map as a predicate. If the value of a
+  key-val pair is a function, use it as a predicate. If the tested map
+  value is not found, pass.
+
+  For example:
+  Criteria map:  {:a #(> % 10) :b \"foo\"}
+  Tested-maps  {:a 20 :b \"foo\"}  success
+               {:b \"foo\"}        success
+               {:a nil :b \"foo\"} fail"
+  [criteria]
+  (where* criteria :pass))
+
+
+
+(defn take-properties-while
+  "Given a list of properties, will retrieve them until one doesn't
+  match the criteria map."
+  [device-id object-identifier criteria-map coll-properties]
+  (take-while (where-or-not-found criteria-map)
+              (get-properties-incrementally device-id object-identifier coll-properties)))
+
+(defn filter-objects
+  "will return a list of object-map that matches the entire criteria-map.
+
+   Criteria-map example:
+   {:present-value #(> % 10) :object-name #\"(?i)analog\" :model-name \"GNU\"}
+
+   If any object property fails the tests, the remaining properties
+   won't be retrieved. Consequently, less and less objects should be
+   checked as the criteria-map is tested, bringing down the network
+   traffic."
+  [device-id objects-identifier-coll criteria-map]
+  (let [coll-properties (keys criteria-map)]
+    (filter (where criteria-map)
+            (for [object-identifier objects-identifier-coll]
+              (last (take-properties-while device-id object-identifier criteria-map coll-properties))))))
