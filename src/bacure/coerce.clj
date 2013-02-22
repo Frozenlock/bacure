@@ -68,7 +68,8 @@
 (defn from-camel [string]
   (let [pre-string (subs string 0 1) ;;we want to keep the first uppercase letter, so we can reverse the process
         post-string (subs string 1)]
-  (str pre-string (str/replace post-string #"[A-Z]" #(str \- (str/lower-case %))))))
+    (str pre-string (-> (str/replace post-string #"[A-Z][^A-Z]+" #(str \- (str/lower-case %)))
+                        (str/replace #"([A-Z]+)" "-$1")))))
 
 (defn to-camel [string] (str/replace string #"-." #(str/upper-case (last %))))
 
@@ -106,6 +107,10 @@
 
 (def engineering-units-map
   (subclass-to-map EngineeringUnits))
+
+
+(def segmentation-int-map
+  (subclass-to-map com.serotonin.bacnet4j.type.enumerated.Segmentation))
 
 (def reliability-map
   "The .toString method doesn't return the name, but instead the
@@ -245,6 +250,9 @@
   (let [object-types-supported (com.serotonin.bacnet4j.type.constructed.ObjectTypesSupported.)]
     (coerce-supported object-types-supported smap)))
 
+(defn c-segmentation [value]
+  (Segmentation. (map-or-num segmentation-int-map value)))
+
 (defn c-property-value [property-identifier property-value]
   (PropertyValue. property-identifier property-value))
 
@@ -284,6 +292,10 @@
   (bacnet->clojure [^ObjectType o]
     (string-name-to-keyword o))
 
+  com.serotonin.bacnet4j.type.enumerated.Segmentation
+  (bacnet->clojure [^Segmentation o]
+    (string-name-to-keyword o))
+  
   com.serotonin.bacnet4j.type.primitive.Real
   (bacnet->clojure [^Real o]
     (.floatValue o))
@@ -387,13 +399,18 @@
   
   com.serotonin.bacnet4j.util.PropertyValues
   (bacnet->clojure [^PropertyValues o]
-    (into {}
-          (for [p-ref o]
-            (let [value (bacnet->clojure (.getNullOnError
-                                          o
-                                          (.getObjectIdentifier p-ref)
-                                          (.getPropertyIdentifier p-ref)))]
-              [(string-name-to-keyword (.getPropertyIdentifier p-ref)) value]))))
+    (letfn [(get-values [p-ref o]
+              (let [object-identifier (.getObjectIdentifier p-ref)
+                    value (bacnet->clojure (.getNullOnError o object-identifier (.getPropertyIdentifier p-ref)))]
+                (into {}
+                      [[:object-identifier (bacnet->clojure object-identifier)]
+                       [(string-name-to-keyword (.getPropertyIdentifier p-ref)) value]])))]
+      ;; get-values return values in the form of {:object-identifier ... :prop-name value}
+      (->> (for [p-ref o]
+             (get-values p-ref o))
+           (group-by :object-identifier)
+           vals
+           (map #(apply merge %)))))
 
   com.serotonin.bacnet4j.type.enumerated.PropertyIdentifier
   (bacnet->clojure [^PropertyIdentifier o]

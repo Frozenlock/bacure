@@ -233,44 +233,71 @@ available in the atom 'local-device-configs."
   [device-id object-identifier]
   (.send @local-device (rd device-id)
          (DeleteObjectRequest. (coerce/c-object-identifier object-identifier))))
-  
+
+
+(defn- retrieve-prop-fn-chooser
+  "Return a function to retrieve properties values. How the data is
+  fetched is determined by the remote-device's segmentation support.
+
+  If segmentation is supported, retrieve every objects at once. If it
+  isn't, retrieve them one at the time." [device-id]
+  (let [segmentation (-> (rd device-id) bean :segmentationSupported coerce/bacnet->clojure)]
+    (fn [object-identifiers prop-identifiers]
+      (if (= :both segmentation) ;; if segmentation is supported, merge everything together
+        (let [refs (com.serotonin.bacnet4j.util.PropertyReferences.)]
+          (doseq [object-identifier object-identifiers]
+            (let [oid (coerce/c-object-identifier object-identifier)]
+              (doseq [prop-id prop-identifiers]
+                (.add refs oid prop-id))))
+          (coerce/bacnet->clojure (.readProperties @local-device (rd device-id) refs)))
+        (apply concat ;;if no segmentation is supported, just do one object per request
+         (for [object-identifier object-identifiers]
+           (let [refs (com.serotonin.bacnet4j.util.PropertyReferences.)
+                 oid (coerce/c-object-identifier object-identifier)]
+             (doseq [prop-id prop-identifiers]
+               (.add refs oid prop-id))
+             (coerce/bacnet->clojure (.readProperties @local-device (rd device-id) refs)))))))))
 
 (defn object-properties-values-with-nil
   "Query a remote device and return the properties values
-   Example: (object-properties-values 1234 [:analog-input 0] [:all])
+   Example: (object-properties-values 1234 [:analog-input 0] :all)
    -> {:notification-class 4194303, :event-enable .....}
 
+   Both `object-identifiers' and `properties' accept either a single
+   item or a collection.
+
    You probably want to use `object-properties-values'."
-  [device-id object-identifier coll-properties]
-  (let [oid (coerce/c-object-identifier object-identifier)
-        refs (com.serotonin.bacnet4j.util.PropertyReferences.)
-        prop-identifiers (map #(coerce/make-property-identifier %) coll-properties)]
-    (doseq [prop-id prop-identifiers]
-      (.add refs oid prop-id))
-    (coerce/bacnet->clojure (.readProperties @local-device (rd device-id) refs))))
+  [device-id object-identifiers properties]
+  (let [object-identifiers ((fn[x] (if ((comp coll? first) x) x [x])) object-identifiers)
+        properties ((fn [x] (if (coll? x) x [x])) properties)
+        prop-identifiers (map #(coerce/make-property-identifier %) properties)]
+    ((retrieve-prop-fn-chooser device-id) object-identifiers prop-identifiers)))
 
 (defn object-properties-values
   "Query a remote device and return the properties values
-   Example: (object-properties-values 1234 [:analog-input 0] [:all])
+   Example: (object-properties-values 1234 [:analog-input 0] :all)
    -> {:notification-class 4194303, :event-enable .....}
 
+   Both `object-identifiers' and `properties' accept either a single
+   item or a collection.
+
    Discards any properties with a `nil' value (property not found in object)."
-  [device-id object-identifier coll-properties]
-  (->> (object-properties-values-with-nil device-id object-identifier coll-properties)
-       (remove #(nil? (val %)))
-       (into {})))
+  [device-id object-identifiers properties]
+  (->> (object-properties-values-with-nil device-id object-identifiers properties)
+       (map (fn [m] (remove #(nil? (val %)) m)))
+       (map #(into {} %))))
 
 (defn remote-objects
   "Return a map of every objects in the remote device.
    -> [[:device 1234] [:analog-input 0]...]"
   [device-id]
-  (-> (object-properties-values device-id [:device device-id] [:object-list])
-      :object-list))
+  (-> (object-properties-values device-id [:device device-id] :object-list)
+      ((comp :object-list first))))
 
 (defn remote-objects-all-properties
   "Return a list of maps of every objects and their properties."
   [device-id]
-  (map #(object-properties-values device-id % [:all]) (remote-objects device-id)))
+  (object-properties-values device-id (remote-objects device-id) :all))
 
 (defn set-remote-properties
   "Set all the given objects properties in the remote device."
@@ -288,28 +315,6 @@ available in the atom 'local-device-configs."
 ;; ================================================================
 ;; Filtering and querying functions
 ;; ================================================================
-
-
-(defn get-properties-incrementally
-  "Return a lazy list of increasingly bigger object-map (collection of properties).
-   Interesting value would be the `last', as it would contain all the properties.
-
-   Each property is requested individually, which requires a higher
-   traffic on the network. However, it also enables us to stop a query
-   if one of the properties values isn't what we wished. Useful if we
-   want to find devices with particular properties.
-
-   A typical use would be with `take-while'. If the predicate fails,
-   any unfetched properties will just be dropped, saving some traffic
-   on the network. Can quickly become advantageous if we query a large
-   number of devices."
-  [remote-device object-identifier coll-properties]
-  (let [object-map {:object-identifier object-identifier};construct an initial object-map
-        get-prop  (fn [o p]
-                    (merge o
-                           (object-properties-values-with-nil remote-device (:object-identifier o) [p])))]
-    (reductions get-prop object-map coll-properties)))
-
 
 (defn- where*
   [criteria not-found-result]
@@ -350,27 +355,56 @@ available in the atom 'local-device-configs."
   [criteria]
   (where* criteria :pass))
 
+(defn- update-objects-maps
+  "Return the objects-maps with the new property added."
+  [device-id objects-maps property]
+  (->> (object-properties-values-with-nil
+         device-id (map :object-identifier objects-maps) property)
+       (concat objects-maps)
+       (group-by :object-identifier)
+       vals
+       (map #(apply merge %))))
 
-
-(defn take-properties-while
-  "Given a list of properties, will retrieve them until one doesn't
-  match the criteria map."
-  [device-id object-identifier criteria-map coll-properties]
-  (take-while (where-or-not-found criteria-map)
-              (get-properties-incrementally device-id object-identifier coll-properties)))
-
-(defn filter-objects
-  "will return a list of object-map that matches the entire criteria-map.
+  
+(defn find-objects
+  "Return a list of objects-maps (properties) matching the criteria-map.
 
    Criteria-map example:
    {:present-value #(> % 10) :object-name #\"(?i)analog\" :model-name \"GNU\"}
+   
+   Each different* property is requested individually, which requires
+   a higher traffic on the network. However, it also enables us to
+   stop a query if one of the properties values isn't what we wished.
+   Useful if we want to find devices with particular properties.
 
-   If any object property fails the tests, the remaining properties
-   won't be retrieved. Consequently, less and less objects should be
-   checked as the criteria-map is tested, bringing down the network
-   traffic."
-  [device-id objects-identifier-coll criteria-map]
+   If the criteria-map fails, any unfetched properties will just be
+   dropped, saving some traffic on the network. Can quickly become
+   advantageous if we query a large number of devices.
+
+   * In case of multiple objects, if segmentation is supported, the
+     same property is retrieved in a single request. For example, the
+     `description' property for 3 different objects would be merged
+     into a single request."
+  ([device-id criteria-map] (find-objects device-id criteria-map (remote-objects device-id)))
+  ([device-id criteria-map object-identifiers]
+     (let [properties (keys criteria-map)
+           init-map (map #(hash-map :object-identifier %) object-identifiers)
+           update-and-filter (fn [m p]
+                               (filter (where-or-not-found criteria-map)
+                                       (update-objects-maps device-id m p)))]
+       (reduce update-and-filter
+               init-map
+               properties)))
+
+
+(defn find-objects-everywhere
+  "Same as `find-objects', but will search every known devices on the network.
+
+   Criteria-map example:
+   {:present-value #(> % 10) :object-name #\"(?i)analog\" :model-name \"GNU\"}"
+  [object-identifiers criteria-map]
+  (validate-properties-incrementally device-id
   (let [coll-properties (keys criteria-map)]
     (filter (where criteria-map)
-            (for [object-identifier objects-identifier-coll]
-              (last (take-properties-while device-id object-identifier criteria-map coll-properties))))))
+            (for [object-identifier object-identifiers]
+              (last (take-properties-while device-id object-identifier criteria-map coll-properties)))))))
