@@ -258,7 +258,7 @@ available in the atom 'local-device-configs."
                (.add refs oid prop-id))
              (coerce/bacnet->clojure (.readProperties @local-device (rd device-id) refs)))))))))
 
-(defn object-properties-values-with-nil
+(defn remote-object-properties-with-nil
   "Query a remote device and return the properties values
    Example: (object-properties-values 1234 [:analog-input 0] :all)
    -> {:notification-class 4194303, :event-enable .....}
@@ -266,16 +266,16 @@ available in the atom 'local-device-configs."
    Both `object-identifiers' and `properties' accept either a single
    item or a collection.
 
-   You probably want to use `object-properties-values'."
+   You probably want to use `remote-object-properties'."
   [device-id object-identifiers properties]
   (let [object-identifiers ((fn[x] (if ((comp coll? first) x) x [x])) object-identifiers)
         properties ((fn [x] (if (coll? x) x [x])) properties)
         prop-identifiers (map #(coerce/make-property-identifier %) properties)]
     ((retrieve-prop-fn-chooser device-id) object-identifiers prop-identifiers)))
 
-(defn object-properties-values
+(defn remote-object-properties
   "Query a remote device and return the properties values
-   Example: (object-properties-values 1234 [:analog-input 0] :all)
+   Example: (remote-object-properties 1234 [:analog-input 0] :all)
    -> {:notification-class 4194303, :event-enable .....}
 
    Both `object-identifiers' and `properties' accept either a single
@@ -283,7 +283,7 @@ available in the atom 'local-device-configs."
 
    Discards any properties with a `nil' value (property not found in object)."
   [device-id object-identifiers properties]
-  (->> (object-properties-values-with-nil device-id object-identifiers properties)
+  (->> (remote-object-properties-with-nil device-id object-identifiers properties)
        (map (fn [m] (remove #(nil? (val %)) m)))
        (map #(into {} %))))
 
@@ -291,13 +291,13 @@ available in the atom 'local-device-configs."
   "Return a map of every objects in the remote device.
    -> [[:device 1234] [:analog-input 0]...]"
   [device-id]
-  (-> (object-properties-values device-id [:device device-id] :object-list)
+  (-> (remote-object-properties device-id [:device device-id] :object-list)
       ((comp :object-list first))))
 
 (defn remote-objects-all-properties
   "Return a list of maps of every objects and their properties."
   [device-id]
-  (object-properties-values device-id (remote-objects device-id) :all))
+  (remote-object-properties device-id (remote-objects device-id) :all))
 
 (defn set-remote-properties
   "Set all the given objects properties in the remote device."
@@ -358,7 +358,7 @@ available in the atom 'local-device-configs."
 (defn- update-objects-maps
   "Return the objects-maps with the new property added."
   [device-id objects-maps property]
-  (->> (object-properties-values-with-nil
+  (->> (remote-object-properties-with-nil
          device-id (map :object-identifier objects-maps) property)
        (concat objects-maps)
        (group-by :object-identifier)
@@ -394,17 +394,28 @@ available in the atom 'local-device-configs."
                                        (update-objects-maps device-id m p)))]
        (reduce update-and-filter
                init-map
-               properties)))
+               properties))))
 
 
 (defn find-objects-everywhere
   "Same as `find-objects', but will search every known devices on the network.
+   Group the result in a map where the device object identifier is the
+   key. E.g. [:device 1234]
 
-   Criteria-map example:
-   {:present-value #(> % 10) :object-name #\"(?i)analog\" :model-name \"GNU\"}"
-  [object-identifiers criteria-map]
-  (validate-properties-incrementally device-id
-  (let [coll-properties (keys criteria-map)]
-    (filter (where criteria-map)
-            (for [object-identifier object-identifiers]
-              (last (take-properties-while device-id object-identifier criteria-map coll-properties)))))))
+   Thus, to retrieve the result for a given device, simply do:
+   (get <result> [:device 1234]).
+
+   One could also get the list of devices in which a result matched with:
+   (keys <result>).
+
+   Criteria-map example: {:present-value #(> % 10) :object-name #\"(?i)analog\" :model-name \"GNU\"}"
+  ([criteria-map]
+     (into {}
+           (for [device (remote-devices)]
+             (-> (find-objects device criteria-map)
+                 ((fn [x] [[:device device] x]))))))
+  ([criteria-map object-identifiers]
+     (into {}
+           (for [device (remote-devices)]
+             (-> (find-objects device criteria-map object-identifiers)
+                 ((fn [x] [[:device device] x])))))))
