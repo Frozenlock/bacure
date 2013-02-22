@@ -285,7 +285,7 @@ available in the atom 'local-device-configs."
   [device-id object-identifiers properties]
   (->> (remote-object-properties-with-nil device-id object-identifiers properties)
        (map (fn [m] (remove #(nil? (val %)) m)))
-       (map #(into {} %))))
+       (mapv #(into {} %))))
 
 (defn remote-objects
   "Return a map of every objects in the remote device.
