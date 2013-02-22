@@ -213,6 +213,36 @@ available in the atom 'local-device-configs."
   (for [d (remote-devices)]
     [d (.getName (rd d))]))
 
+(defn find-bacnet-port
+  "Scan ports to see if any BACnet device will respond. If the
+  optionals port-min and port-max aren't given, default to all ports
+  between 47801 and 47820.
+
+  By default each port will wait 500 ms for an answer. Consequently,
+  if you test 20 ports, it will take 10 seconds.
+
+  Example use:
+  (find-bacnet-port) ;;will take 10s to scan ports 47801 to 47820
+  (find-bacnet-port :delay 100) ;; scan the same ports, but faster
+  (find-bacnet-port :port-min 47850 :port-max 47900) ;;new port range
+
+  Even if we could simply send a WhoIs on another port, some BACnet
+  devices have bad behaviour and send data back to the port 47808,
+  regardless from which port the WhoIs came. In other to maximize our
+  chances of finding them, we reset the local device with a new port
+  each time."
+  [&{:keys [delay port-min port-max] :or {delay 500 port-min 47801 port-max 47820}}]
+  (let [configs (local-device-backup)
+        results (->> (for [port (range port-min port-max)]
+                       (do (reset-local-device {:port port})
+                           (find-remote-devices)
+                           (Thread/sleep delay)
+                           (when-let [devices (seq (remote-devices))]
+                             {:port port :devices devices})))
+                     (into [])
+                     (remove nil?))]
+    (reset-local-device configs)
+    results))
 
 
 ;; ================================================================
