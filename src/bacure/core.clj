@@ -34,17 +34,38 @@
 
 (defn new-local-device
   "Return a new configured BACnet local device . (A device is required
-to communicate over the BACnet network.). To terminate it, use the
-java method `terminate'. If needed, the initial configurations are
-available in the atom 'local-device-configs."
+   to communicate over the BACnet network.). To terminate it, use the
+   java method `terminate'. If needed, the initial configurations are
+   available in the atom 'local-device-configs.
+
+   The optional config map can contain the following:
+   :device-id <number>
+   :broadcast-address <string>
+   :port <number>
+   :destination-port <number>
+   :local-address <string> <----- You probably don't want to use it.
+   :timeout <number>
+
+   The device ID is the device identifier on the network. It should be
+   unique.
+
+   Port and destination port are the BACnet port, usually 47808.
+
+   The broadcast-address is the address on which we send 'WhoIs'.
+
+   The local-address will default to \"0.0.0.0\", also known as the
+   'anylocal'. (Default by the underlying BACnet4J library.) This is
+   required on Linux and Solaris machines in order to catch packet
+   sent as a broadcast. You can manually change it, but unless you
+   know exactly what you are doing, bad things will happen."
   ([] (new-local-device nil))
   ([configs-map]
      (let [{:keys [device-id broadcast-address port destination-port local-address timeout]
             :or {device-id 1338 ;;some default configs
-                 broadcast-address (network/get-broadcast-address (network/get-ip))
+                 broadcast-address (network/get-broadcast-address (network/get-any-ip))
                  port 47808
                  destination-port 47808
-                 timeout 10000}}
+                 timeout 1000}}
            configs-map
            ld (LocalDevice. device-id broadcast-address local-address)]
        (.setPort ld port)
@@ -76,7 +97,8 @@ available in the atom 'local-device-configs."
   remote device discovery might fail. The use of
   `find-remote-devices-and-services-supported' is highly recommended, even if it
   might take a little longer to execute."
-  [&[{:keys [min-range max-range dest-port] :or {dest-port (:destination-port @local-device-configs)}}]]
+  [&[{:keys [min-range max-range dest-port]
+      :or {dest-port (:destination-port @local-device-configs)}}]]
   (.sendBroadcast @local-device
                   dest-port (if (or min-range max-range)
                               (WhoIsRequest.
@@ -113,7 +135,8 @@ available in the atom 'local-device-configs."
 (defn remove-object
   "Remove a local object"
   [object-map]
-  (.removeObject @local-device (coerce/c-object-identifier (:object-identifier object-map))))
+  (.removeObject @local-device
+                 (coerce/c-object-identifier (:object-identifier object-map))))
 
 (defn remove-all-objects
   "Remove all local object"[]
@@ -168,8 +191,8 @@ available in the atom 'local-device-configs."
 
 
 (defn load-local-device-backup
-  "Load the local-device backup file and reset it with this new configuration."
-  []
+  "Load the local-device backup file and reset it with this new
+  configuration." []
   (reset-local-device (save/get-configs)))
 
 
@@ -187,7 +210,8 @@ available in the atom 'local-device-configs."
 
 
 (defn boot-up
-  "Create a local-device, load its config file, initialize it, and find the remote devices." []
+  "Create a local-device, load its config file, initialize it, and
+  find the remote devices." []
   (load-local-device-backup)
   (future (dorun ; in another thread
            (->> (repeatedly 5 find-remote-devices-and-extended-information);;try up to 5 time
@@ -340,7 +364,15 @@ available in the atom 'local-device-configs."
                     (coerce/make-property-identifier (key prop))
                     (val prop)))))
 
+(defn get-device-id
+  "Return the device-id from a device-map (bunch of properties).
 
+   This can be used to search the device-id amongst all the properties
+  returned by (remote-objects-all-properties <some-device-id>)."
+  [device-map]
+  (->> (map :object-identifier device-map)
+       (filter (comp #{:device} first))
+       ((comp second first))))
 
 ;; ================================================================
 ;; Filtering and querying functions
@@ -438,7 +470,8 @@ available in the atom 'local-device-configs."
    One could also get the list of devices in which a result matched with:
    (keys <result>).
 
-   Criteria-map example: {:present-value #(> % 10) :object-name #\"(?i)analog\" :model-name \"GNU\"}"
+   Criteria-map example:
+   {:present-value #(> % 10) :object-name #\"(?i)analog\" :model-name \"GNU\"}"
   ([criteria-map]
      (into {}
            (for [device (remote-devices)]

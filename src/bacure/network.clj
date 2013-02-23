@@ -4,16 +4,32 @@
 (import 'java.net.InetSocketAddress)
 (import java.net.InetAddress java.net.Inet4Address)
 
-(defn get-ip
-  "Return the first IPv4 address which IS NOT the localhost (\"127.0.0.1\")"
-  []
-  (let [IP-list
-        (for [inter (enumeration-seq (java.net.NetworkInterface/getNetworkInterfaces))]
-          (for [ip (enumeration-seq (.getInetAddresses inter))]
-            (.getHostAddress ip)))
-        IPv4-list (map #(re-matches #"\d\d?\d?\.\d\d?\d?\.\d\d?\d?\.\d\d?\d?" %)
-                       (flatten IP-list))]
-    (first (remove #(or (= "127.0.0.1" %) (= nil %)) IPv4-list))))
+(defn get-interfaces
+  "Return the list of interfaces on this machine."[]
+  (enumeration-seq (java.net.NetworkInterface/getNetworkInterfaces)))
+
+(defn ipv4-from-interface
+  "Return a list of available IPs from the interface. Remove any
+  loopback address.
+
+  As BACnet doesn't support IPv6 yet, just keep IPv4."
+  [interface]
+  (->> (enumeration-seq (.getInetAddresses interface))
+       (filter #(instance? Inet4Address %))
+       (remove #(.isLoopbackAddress %))
+       (map #(.getHostAddress %))
+       (remove nil?)))
+
+(defn interfaces-and-ips []
+  (let [interfaces (get-interfaces)]
+    (->> (for [i interfaces]
+           (when-let [ips (seq (ipv4-from-interface i))]
+             {:interface (.getName i) :ips ips}))
+         (remove nil?))))
+        
+(defn get-any-ip
+  "Return the first IPv4 found." []
+  (-> (interfaces-and-ips) first :ips first))
 
 (defn get-broadcast-address
   "Given a local-ip, return the most probable broadcast address"
