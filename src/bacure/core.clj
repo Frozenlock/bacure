@@ -266,6 +266,9 @@
                      (into [])
                      (remove nil?))]
     (reset-local-device configs)
+    (future (dorun ; in another thread
+             (->> (repeatedly 5 find-remote-devices-and-extended-information);;try up to 5 time
+                  (take-while empty?))))
     results))
 
 
@@ -367,7 +370,7 @@
 (defn get-device-id
   "Return the device-id from a device-map (bunch of properties).
 
-   This can be used to search the device-id amongst all the properties
+  This can be used to search the device-id amongst all the properties
   returned by (remote-objects-all-properties <some-device-id>)."
   [device-map]
   (->> (map :object-identifier device-map)
