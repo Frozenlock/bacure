@@ -89,23 +89,6 @@
   (try (.terminate @local-device)
        (catch Exception e))) ;if the device isn't initialized, it will throw an error
 
-(defn find-remote-devices
-  "We find remote devices by sending a 'WhoIs' broadcast. Every device
-  that responds is added to the remote-devices field in the
-  local-device. WARNING: This won't ask the device if it supports
-  read-property-multiple. Thus, any property read based solely on this
-  remote device discovery might fail. The use of
-  `find-remote-devices-and-services-supported' is highly recommended, even if it
-  might take a little longer to execute."
-  [&[{:keys [min-range max-range dest-port]
-      :or {dest-port (:destination-port @local-device-configs)}}]]
-  (.sendBroadcast @local-device
-                  dest-port (if (or min-range max-range)
-                              (WhoIsRequest.
-                               (UnsignedInteger. (or min-range 0))
-                               (UnsignedInteger. (or max-range 4194304)))
-                              (WhoIsRequest.))))
-
 
 (defn local-objects
   "Return a list of local objects"[]
@@ -196,33 +179,10 @@
   (reset-local-device (save/get-configs)))
 
 
-(defn find-remote-devices-and-extended-information
-  "Given a local device, sends a WhoIs. For every device discovered,
-  get its extended information. Return the remote devices as a list."
-  [&[{:keys [min-range max-range dest-port] :as args}]]
-  (find-remote-devices args)
-  (Thread/sleep 500) ;wait a little to insure we get the responses
-  (let [rds (-> @local-device (.getRemoteDevices))]
-    (doseq [remote-device rds]
-      (-> @local-device (.getExtendedDeviceInformation remote-device)))
-    (for [rd rds]
-      (.getInstanceNumber rd))))
-
-
-(defn boot-up
-  "Create a local-device, load its config file, initialize it, and
-  find the remote devices." []
-  (load-local-device-backup)
-  (future (dorun ; in another thread
-           (->> (repeatedly 5 find-remote-devices-and-extended-information);;try up to 5 time
-                (take-while empty?))))
-  true)
-
-
 (defn remote-devices
   "Return the list of the current remote devices. These devices must
-  be in the local table. To scan a network, use
-  `find-remote-devices-and-extended-information'." []
+  be in the local table. To scan a network, use `discover-network'."
+  []
   (for [rd (seq (.getRemoteDevices @local-device))]
     (.getInstanceNumber rd)))
 
@@ -230,6 +190,69 @@
   "Get the remote device by its device-id"
   [device-id]
   (.getRemoteDevice @local-device device-id))
+
+(defn- extended-information
+  "Get the remote device extended information (name, segmentation,
+  property multiple, etc..) if we haven't already."[device-id]
+  (let [device (rd device-id)]
+    (when-not (.getName device)
+      (-> @local-device
+          (.getExtendedDeviceInformation device)))))
+
+(defn all-extended-information
+  "Make sure that we have the extended information of every known
+   remote devices.
+
+   Can be used some time the network discovery mechanism, as some
+   devices might take a while to answer the WhoIs." []
+   (doseq [device (remote-devices)]
+     (extended-information device)))
+
+(defn- find-remote-devices
+  "We find remote devices by sending a 'WhoIs' broadcast. Every device
+  that responds is added to the remote-devices field in the
+  local-device. WARNING: This won't ask the device if it supports
+  read-property-multiple. Thus, any property read based solely on this
+  remote device discovery might fail. The use of `discover-network' is
+  highly recommended, even if it might take a little longer to
+  execute." [&[{:keys [min-range max-range dest-port]
+      :or {dest-port (:destination-port @local-device-configs)}}]]
+  (.sendBroadcast @local-device
+                  dest-port (if (or min-range max-range)
+                              (WhoIsRequest.
+                               (UnsignedInteger. (or min-range 0))
+                               (UnsignedInteger. (or max-range 4194304)))
+                              (WhoIsRequest.))))
+
+(defn- find-remote-devices-and-extended-information
+  "Sends a WhoIs. For every device discovered,
+  get its extended information. Return the remote devices as a list."
+  [&[{:keys [min-range max-range dest-port] :as args}]]
+  (find-remote-devices args)
+  (Thread/sleep 500) ;wait a little to insure we get the responses
+  (all-extended-information)
+  (remote-devices))
+
+(defn discover-network
+  "Find remote devices and their extended info. By default, will try
+   up to 5 time if not a single device answer. Return the list of
+   remote-devices.
+
+   Should be called in a future call to avoid `hanging' the program
+   while waiting for the remote devices to answer."
+  ([] (discover-network 5))
+  ([tries]
+     (dorun
+      (->> (repeatedly tries find-remote-devices-and-extended-information)
+           (take-while empty?)))
+     (seq (remote-devices))))
+   
+(defn boot-up
+  "Create a local-device, load its config file, initialize it, and
+  find the remote devices." []
+  (load-local-device-backup)
+  (future (discover-network)) true)
+
 
 (defn remote-devices-and-names
   "Return a list of vector pair with the device-id and its name.
@@ -258,7 +281,7 @@
   [&{:keys [delay port-min port-max] :or {delay 500 port-min 47801 port-max 47820}}]
   (let [configs (local-device-backup)
         results (->> (for [port (range port-min port-max)]
-                       (do (reset-local-device {:port port})
+                       (do (reset-local-device {:port port :destination-port port})
                            (find-remote-devices)
                            (Thread/sleep delay)
                            (when-let [devices (seq (remote-devices))]
@@ -266,9 +289,7 @@
                      (into [])
                      (remove nil?))]
     (reset-local-device configs)
-    (future (dorun ; in another thread
-             (->> (repeatedly 5 find-remote-devices-and-extended-information);;try up to 5 time
-                  (take-while empty?))))
+    (future (discover-network))
     results))
 
 
@@ -479,9 +500,11 @@
      (into {}
            (for [device (remote-devices)]
              (-> (find-objects device criteria-map)
-                 ((fn [x] [[:device device] x]))))))
+                 ((fn [x] (when (seq x)
+                            [[:device device] x])))))))
   ([criteria-map object-identifiers]
      (into {}
            (for [device (remote-devices)]
              (-> (find-objects device criteria-map object-identifiers)
-                 ((fn [x] [[:device device] x])))))))
+                 ((fn [x] (when (seq x)
+                            [[:device device] x]))))))))

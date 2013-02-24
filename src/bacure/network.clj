@@ -20,7 +20,10 @@
        (map #(.getHostAddress %))
        (remove nil?)))
 
-(defn interfaces-and-ips []
+(defn interfaces-and-ips
+  "Return a list of interfaces and their IPs.
+
+   ({:interface \"wlan0\", :ips (\"192.168.0.2\")})"[]
   (let [interfaces (get-interfaces)]
     (->> (for [i interfaces]
            (when-let [ips (seq (ipv4-from-interface i))]

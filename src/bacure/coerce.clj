@@ -436,7 +436,7 @@
   
   com.serotonin.bacnet4j.type.AmbiguousValue
   (bacnet->clojure [^AmbiguousValue o]
-    (re-find #"\[.+\]" (.toString o)))
+    (.hashCode o))
 
   clojure.lang.PersistentHashMap
   (bacnet->clojure [^clojure.lang.PersistentHashMap o]
