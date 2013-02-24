@@ -60,7 +60,8 @@
            (java.util ArrayList List)))
 
 
-
+(def ^:dynamic *drop-ambiguous*
+  "Ambiguous values will be dropped unless this is bound to false." true)
 
 
 ;; functions to convert between camel-case and a more clojure-like style
@@ -266,7 +267,9 @@
 ;;================================================================
 ;; Convert to Clojure objects
 ;;================================================================  
-    
+
+;; Might be wise to use multimethods here, instead of a protocol.
+
 (defprotocol BacnetClojure
   (bacnet->clojure [o]))
 
@@ -436,8 +439,11 @@
   
   com.serotonin.bacnet4j.type.AmbiguousValue
   (bacnet->clojure [^AmbiguousValue o]
-    (.hashCode o))
+    (if-not *drop-ambiguous* (.hashCode o)
+            nil)) ;; drop it! Ambiguous value was causing a lot of issues with
+                  ;; higher order functions, especially in case of comparison.
 
+  
   clojure.lang.PersistentHashMap
   (bacnet->clojure [^clojure.lang.PersistentHashMap o]
     (into {} (for [[k v] o] [k (bacnet->clojure v)]))))
@@ -448,6 +454,9 @@
 
 ;; here we associate, for every object, what datatype-fn should be
 ;; used to encode the data, with the property.
+
+;; *** Some interesting properties found in com.serotonin.bacnet4j.obj.ObjectProperties
+;; Perhaps I won't have to make my own datatype/object-properties table!
 
 
 (defn encode-properties-values
