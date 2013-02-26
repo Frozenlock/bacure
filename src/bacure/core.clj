@@ -196,8 +196,11 @@
   property multiple, etc..) if we haven't already."[device-id]
   (let [device (rd device-id)]
     (when-not (.getName device)
-      (-> @local-device
-          (.getExtendedDeviceInformation device)))))
+      (try (-> @local-device
+               (.getExtendedDeviceInformation device))
+           (catch Exception e))))) ;;will throw an exception if
+                                   ;;receives unimplemented vendor
+                                   ;;service, so catch it.
 
 (defn all-extended-information
   "Make sure that we have the extended information of every known
