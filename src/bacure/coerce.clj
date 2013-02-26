@@ -63,6 +63,9 @@
 (def ^:dynamic *drop-ambiguous*
   "Ambiguous values will be dropped unless this is bound to false." true)
 
+(def ^:dynamic *throw-on-bacnet-error*
+  "If true, throw an error when coercing a bacnet error. Otherwise,
+   the error will be converted to nil." false)
 
 ;; functions to convert between camel-case and a more clojure-like style
 
@@ -435,7 +438,8 @@
 
   com.serotonin.bacnet4j.type.constructed.BACnetError
   (bacnet->clojure [^BACnetError o]
-    (throw (Exception. (.toString o))));;throw an error
+    (when *throw-on-bacnet-error*
+      (throw (Exception. (.toString o)))));;throw an error
   
   com.serotonin.bacnet4j.type.AmbiguousValue
   (bacnet->clojure [^AmbiguousValue o]

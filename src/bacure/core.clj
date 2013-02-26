@@ -444,13 +444,12 @@
 (defn- update-objects-maps
   "Return the objects-maps with the new property added."
   [device-id objects-maps property]
-  (when (seq objects-maps)
-    (->> (remote-object-properties-with-nil
-           device-id (map :object-identifier objects-maps) property)
-         (concat objects-maps)
-         (group-by :object-identifier)
-         vals
-         (map #(apply merge %)))))
+  (->> (remote-object-properties-with-nil
+         device-id (map :object-identifier objects-maps) property)
+       (concat objects-maps)
+       (group-by :object-identifier)
+       vals
+       (map #(apply merge %))))
 
   
 (defn find-objects
@@ -477,8 +476,8 @@
      (let [properties (keys criteria-map)
            init-map (map #(hash-map :object-identifier %) object-identifiers)
            update-and-filter (fn [m p]
-                               (filter (where-or-not-found criteria-map)
-                                       (update-objects-maps device-id m p)))]
+                               (when-let [updated-object-map (update-objects-maps device-id m p)]
+                                 (filter (where-or-not-found criteria-map) updated-object-map)))]
        (reduce update-and-filter
                init-map
                properties))))
