@@ -14,6 +14,13 @@
   (clojure.java.io/make-parents f)
   (spit f content))
 
+(defn safe-read
+  "Evaluate the string in a safe way. If error while reading, return
+  nil" [s]
+  (try (binding [*read-eval* false]
+         (read-string s))
+       (catch Exception e)))
+
 (defn make-program-path [name]
   (str path name ".clj"))
 
@@ -54,7 +61,7 @@
 
 (defn get-configs
   "Get the map configs for the local device."[]
-  (let [configs (try (-> config-file slurp read-string)
+  (let [configs (try (-> config-file slurp safe-read)
                      (catch Exception e))]
     (when (map? configs) configs)))
 

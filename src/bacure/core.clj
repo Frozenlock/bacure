@@ -198,9 +198,12 @@
     (when-not (.getName device)
       (try (-> @local-device
                (.getExtendedDeviceInformation device))
-           (catch Exception e))))) ;;will throw an exception if
-                                   ;;receives unimplemented vendor
-                                   ;;service, so catch it.
+           (catch Exception e
+             (.setSegmentationSupported device (coerce/c-segmentation :unknown))
+             (.setServicesSupported device (coerce/c-services-supported {:read-property true})))))))
+;; if there's an error while getting the extended device information, just assume that
+;; there is almost no services supported. (Patch necessary until this function is implemented in clojure)
+
 
 (defn all-extended-information
   "Make sure that we have the extended information of every known
