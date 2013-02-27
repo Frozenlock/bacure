@@ -280,11 +280,11 @@
   (find-bacnet-port :port-min 47850 :port-max 47900) ;;new port range
 
   Even if we could simply send a WhoIs on another port, some BACnet
-  devices have bad behaviour and send data back to the port 47808,
+  devices have bad behaviour and send data back to 'their' port,
   regardless from which port the WhoIs came. In other to maximize our
   chances of finding them, we reset the local device with a new port
-  each time."
-  [&{:keys [delay port-min port-max] :or {delay 500 port-min 47801 port-max 47820}}]
+  each time." [&{:keys [delay port-min port-max] :or
+                 {delay 500 port-min 47801 port-max 47820}}]
   (let [configs (local-device-backup)
         results (->> (for [port (range port-min port-max)]
                        (do (reset-local-device {:port port :destination-port port})
@@ -372,7 +372,7 @@
        (mapv #(into {} %))))
 
 (defn remote-objects
-  "Return a map of every objects in the remote device.
+  "Return a collection of every objects in the remote device.
    -> [[:device 1234] [:analog-input 0]...]"
   [device-id]
   (-> (remote-object-properties device-id [:device device-id] :object-list)
@@ -417,7 +417,8 @@
                    (= tested-value :not-found) not-found-result
                    (and (fn? v) tested-value) (v tested-value)
                    (number? tested-value) (== tested-value v)
-                   (= (class v) java.util.regex.Pattern) (re-find v tested-value)
+                   (and (= (class v) java.util.regex.Pattern)
+                        (string? tested-value)) (re-find v tested-value)
                    (= tested-value v) :pass))) criteria)))
 
 (defn where
