@@ -565,6 +565,16 @@
    (->> (ObjectProperties/getRequiredPropertyTypeDefinitions
          (c-object-type :analog-input))
         (map bacnet->clojure)))
+
+(defn properties-by-option
+  "Return a list or properties. `option' should
+  be :required, :optional, :sequence or :all."
+  [object-type option]
+  (let [profile (object-profile object-type)]
+    (->> (if (= option :all) profile
+             (filter (comp option last) profile))
+         (map first))))
+  
    
 
 
