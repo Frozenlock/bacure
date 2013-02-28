@@ -145,6 +145,51 @@
    :abnormal 3
    :failed 4})
 
+(def services-list
+  "List of services associated with their bit-string value. We need to
+   keep the ordering here, so no map."
+  [[:acknowledge-alarm 0]
+   [:confirmed-cov-notification 1]
+   [:confirmed-event-notification 2]
+   [:get-alarm-summary 3]
+   [:get-enrollment-summary 4]
+   [:subscribe-cov 5]
+   [:atomic-read-file 6]
+   [:atomic-write-file 7]
+   [:add-list-element 8]
+   [:remove-list-element 9]
+   [:create-object 10]
+   [:delete-object 11]
+   [:read-property 12]
+   [:read-property-conditional 13]
+   [:read-property-multiple 14]
+   [:write-property 15]
+   [:write-property-multiple 16]
+   [:device-communication-control 17]
+   [:confirmed-private-transfer 18]
+   [:confirmed-text-message 19]
+   [:reinitialize-device 20]
+   [:vt-open 21]
+   [:vt-close 22]
+   [:vt-data 23]
+   [:authenticate 24]
+   [:request-key 25]
+   [:i-am 26]
+   [:i-have 27]
+   [:unconfirmed-cov-notification 28]
+   [:unconfirmed-event-notification 29]
+   [:unconfirmed-private-transfer 30]
+   [:unconfirmed-text-message 31]
+   [:time-synchronization 32]
+   [:who-has 33]
+   [:who-is 34]
+   ;;services added after 1995
+   [:read-range 35]
+   [:utc-time-synchronization 36]
+   [:life-safety-operation 37]
+   [:subscribe-cov-property 38]
+   [:get-event-information 39]])
+
 (defn bean-map
   "Create a clojure map using `bean' and remove unwanted info"
   [java-object]
@@ -406,7 +451,9 @@
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ServicesSupported
   [^ServicesSupported o]
-  (bean-map o))
+  (->> (seq (.getValue o))
+       (interleave (map first services-list))
+       (apply hash-map)))
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ShedLevel
   [^ShedLevel o]

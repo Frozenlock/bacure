@@ -325,6 +325,8 @@
   [device-id]
   (-> (.getServicesSupported (rd device-id))
       coerce/bacnet->clojure))
+;; contrary to the bacnet4j library, we won't throw an error when
+;; dealing with devices not yet supporting the post 1995 services.
 
 
 ;;;; This `read property' section would really benefit from converting
