@@ -1,7 +1,8 @@
 (ns bacure.core
   (:require [bacure.network :as network]
             [bacure.coerce :as coerce]
-            [bacure.local-save :as save]))
+            [bacure.local-save :as save]
+            [clojure.walk :as walk]))
 
 (import '(com.serotonin.bacnet4j 
           LocalDevice 
@@ -338,7 +339,7 @@
    in the case of proprietary objects." [object-identifier properties]
    (-> (fn [x] (if (#{:all :required :optional} x)
                  (coerce/properties-by-option (first object-identifier) x) x))
-       (clojure.walk/postwalk properties)
+       (walk/postwalk properties)
        flatten))
 
 (defn- read-properties [device-id refs]
