@@ -323,7 +323,7 @@
 (defn get-services-supported
   "Return a map of the services supported by the remote device."
   [device-id]
-  (-> (.getServicesSupported (rd 1234))
+  (-> (.getServicesSupported (rd device-id))
       coerce/bacnet->clojure))
 
 
