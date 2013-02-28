@@ -192,6 +192,15 @@
   [device-id]
   (.getRemoteDevice @local-device device-id))
 
+(defn get-services-supported
+  "Return a map of the services supported by the remote device."
+  [device-id]
+  (-> (.getServicesSupported (rd device-id))
+      coerce/bacnet->clojure))
+;; contrary to the bacnet4j library, we won't throw an error when
+;; dealing with devices not yet supporting the post 1995 services.
+
+
 (defn- extended-information
   "Get the remote device extended information (name, segmentation,
   property multiple, etc..) if we haven't already."[device-id]
@@ -200,10 +209,16 @@
       (try (-> @local-device
                (.getExtendedDeviceInformation device))
            (catch Exception e
+             ; if there's an error while getting the extended device
+             ; information, just assume that there is almost no
+             ; services supported. (Patch necessary until this
+             ; function is implemented in clojure)
              (.setSegmentationSupported device (coerce/c-segmentation :unknown))
-             (.setServicesSupported device (coerce/c-services-supported {:read-property true})))))))
-;; if there's an error while getting the extended device information, just assume that
-;; there is almost no services supported. (Patch necessary until this function is implemented in clojure)
+             (.setServicesSupported device (coerce/c-services-supported {:read-property true}))))
+      ;; and now update the services supported to be compatible with pre 1995 BACnet
+      (->> (get-services-supported device-id)
+           coerce/c-services-supported
+           (.setServicesSupported device)))))
 
 
 (defn all-extended-information
@@ -318,15 +333,6 @@
   [device-id object-identifier]
   (.send @local-device (rd device-id)
          (DeleteObjectRequest. (coerce/c-object-identifier object-identifier))))
-
-
-(defn get-services-supported
-  "Return a map of the services supported by the remote device."
-  [device-id]
-  (-> (.getServicesSupported (rd device-id))
-      coerce/bacnet->clojure))
-;; contrary to the bacnet4j library, we won't throw an error when
-;; dealing with devices not yet supporting the post 1995 services.
 
 
 ;;;; This `read property' section would really benefit from converting
