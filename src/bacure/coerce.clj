@@ -62,7 +62,9 @@
             type.primitive.Time
             util.PropertyReferences
             util.PropertyValues
-            obj.BACnetObject)
+            obj.BACnetObject
+            obj.PropertyTypeDefinition
+            obj.ObjectProperties)
            (java.util ArrayList List)))
 
 
@@ -151,8 +153,7 @@
           (for [item m]
             [(keyword (from-camel (name (key item))))
              (val item)]))))
-  
-
+   
 
 ;;================================================================
 ;; Coerce to various datatypes functions
@@ -529,6 +530,15 @@
             nil)) ;; drop it! Ambiguous value was causing a lot of issues with
                   ;; higher order functions, especially in case of comparison.
 
+;; methods for 'obj'
+
+(defmethod bacnet->clojure com.serotonin.bacnet4j.obj.PropertyTypeDefinition
+  [^PropertyTypeDefinition o]
+  [(bacnet->clojure (.getPropertyIdentifier o))
+   {:optional (.isOptional o)
+    :required (.isRequired o)
+    :sequence (.isSequence o)}])
+
 ;; methods for clojure stuff
 
 (defmethod bacnet->clojure clojure.lang.PersistentHashMap
@@ -540,7 +550,22 @@
   (into {} (for [[k v] o] [k (bacnet->clojure v)])))
 
 (defmethod bacnet->clojure nil [_] nil)
+
+;; methods for java
+
+(defmethod bacnet->clojure java.util.ArrayList
+  [^ArrayList o]
+  (map bacnet->clojure (seq o)))
+
 ;;================================================================
+
+(defn object-profile
+  "Given an object type, return the properties it should have, and if
+   they are :required, :optional, or :sequence." [object-type]
+   (->> (ObjectProperties/getRequiredPropertyTypeDefinitions
+         (c-object-type :analog-input))
+        (map bacnet->clojure)))
+   
 
 
 ;; here we associate, for every object, what datatype-fn should be

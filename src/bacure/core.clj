@@ -319,28 +319,73 @@
          (DeleteObjectRequest. (coerce/c-object-identifier object-identifier))))
 
 
+(defn get-services-supported
+  "Return a map of the services supported by the remote device."
+  [device-id]
+  (-> (.getServicesSupported (rd 1234))
+      coerce/bacnet->clojure))
+
+
+;;;; This `read property' section would really benefit from converting
+;;;; lower order functions to clojure.
+
+(defn- replace-special-identifier
+  "For devices that don't support the special identifiers 
+   (i.e. :all, :required and :optional), return a list of properties.
+
+   The :all won't be as the one defined by the BACnet standard,
+   because we can't know for sure what are the properties. (Especially
+   in the case of proprietary objects." [object-identifier properties]
+   (-> (fn [x] (if (#{:all :required :optional} x)
+                 (coerce/properties-by-option (first object-identifier) x) x))
+       (clojure.walk/postwalk properties)
+       flatten))
+
+(defn- read-properties [device-id refs]
+  (.readProperties @local-device (rd device-id) refs))
+
+(defn- retrieve-prop-merge-all
+  [device-id object-identifiers prop-identifiers]
+  (let [rpm (:read-property-multiple (get-services-supported device-id))
+        refs (com.serotonin.bacnet4j.util.PropertyReferences.)]
+    (doseq [object-identifier object-identifiers]
+      (let [oid (coerce/c-object-identifier object-identifier)
+            pids (if-not rpm (replace-special-identifier object-identifier
+                                                         prop-identifiers)
+                         prop-identifiers)]
+        (doseq [prop-id pids]
+          (.add refs oid (coerce/make-property-identifier prop-id)))))
+    (coerce/bacnet->clojure (read-properties device-id refs))))
+
+(defn- retrieve-prop-per-object
+  [device-id object-identifiers prop-identifiers]
+  (apply concat
+         (for [object-identifier object-identifiers]
+           (let [rpm (:read-property-multiple (get-services-supported device-id))
+                 refs (com.serotonin.bacnet4j.util.PropertyReferences.)
+                 oid (coerce/c-object-identifier object-identifier)
+                 pids (if-not rpm (replace-special-identifier object-identifier
+                                                              prop-identifiers)
+                              prop-identifiers)]
+             (doseq [prop-id pids]
+               (.add refs oid (coerce/make-property-identifier prop-id)))
+             (coerce/bacnet->clojure (read-properties device-id refs))))))
+  
 (defn- retrieve-prop-fn-chooser
   "Return a function to retrieve properties values. How the data is
   fetched is determined by the remote-device's segmentation support.
 
   If segmentation is supported, retrieve every objects at once. If it
   isn't, retrieve them one at the time." [device-id]
-  (let [segmentation (-> (rd device-id) bean :segmentationSupported coerce/bacnet->clojure)]
-    (fn [object-identifiers prop-identifiers]
-      (if (= :both segmentation) ;; if segmentation is supported, merge everything together
-        (let [refs (com.serotonin.bacnet4j.util.PropertyReferences.)]
-          (doseq [object-identifier object-identifiers]
-            (let [oid (coerce/c-object-identifier object-identifier)]
-              (doseq [prop-id prop-identifiers]
-                (.add refs oid prop-id))))
-          (coerce/bacnet->clojure (.readProperties @local-device (rd device-id) refs)))
-        (apply concat ;;if no segmentation is supported, just do one object per request
-         (for [object-identifier object-identifiers]
-           (let [refs (com.serotonin.bacnet4j.util.PropertyReferences.)
-                 oid (coerce/c-object-identifier object-identifier)]
-             (doseq [prop-id prop-identifiers]
-               (.add refs oid prop-id))
-             (coerce/bacnet->clojure (.readProperties @local-device (rd device-id) refs)))))))))
+  (let [segmentation (coerce/bacnet->clojure
+                      (.getSegmentationSupported (rd device-id)))]
+    (cond
+     (= segmentation :both) retrieve-prop-merge-all
+     ; there is also :transmit and :receive
+     :else retrieve-prop-per-object)))
+      
+
+;(if-not (:read-property-multiple (get-services-supported device-id))
 
 (defn remote-object-properties-with-nil
   "Query a remote device and return the properties values
@@ -354,8 +399,8 @@
   [device-id object-identifiers properties]
   (let [object-identifiers ((fn[x] (if ((comp coll? first) x) x [x])) object-identifiers)
         properties ((fn [x] (if (coll? x) x [x])) properties)
-        prop-identifiers (map #(coerce/make-property-identifier %) properties)]
-    ((retrieve-prop-fn-chooser device-id) object-identifiers prop-identifiers)))
+        prop-fn (retrieve-prop-fn-chooser device-id)]
+    (prop-fn device-id object-identifiers properties)))
 
 (defn remote-object-properties
   "Query a remote device and return the properties values
