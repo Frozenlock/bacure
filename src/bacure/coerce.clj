@@ -39,8 +39,10 @@
             type.constructed.ReadAccessSpecification
             type.constructed.Recipient
             type.constructed.SequenceOf
+            type.constructed.SetpointReference
             type.constructed.WriteAccessSpecification
             type.constructed.DateTime
+            type.constructed.ObjectPropertyReference
             type.constructed.ObjectTypesSupported
             type.constructed.TimeStamp
             type.constructed.ReadAccessSpecification
@@ -345,6 +347,25 @@
     (PropertyReference. (c-property-identifier property-identifier)
                         (c-unsigned array-index))))
 
+(defn c-object-property-reference [[object-identifier property-reference]]
+  (let [prop-ref (c-property-reference property-reference)]
+    (ObjectPropertyReference. (c-object-identifier object-identifier)
+                              (.getPropertyIdentifier prop-ref)
+                              (.getPropertyArrayIndex prop-ref))))
+                            
+(defn c-device-object-property-reference
+  [[device-object-identifier object-property-reference]]
+  (let [prop-ref (c-property-reference (last object-property-reference))]
+    (DeviceObjectPropertyReference.
+     (c-object-identifier (first object-property-reference))
+     (.getPropertyIdentifier prop-ref)
+     (.getPropertyArrayIndex prop-ref)
+     (c-object-identifier device-object-identifier))))
+
+(defn c-setpoint-reference [object-property-reference]
+  (SetpointReference.
+   (c-object-property-reference object-property-reference)))
+
 ;; DOES NOT WORK! Need to come back to this one
 (defn c-action-command [m]
   (let [{:keys [device-identifier object-identifier property-identifier
@@ -434,10 +455,16 @@
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.DeviceObjectPropertyReference
   [^DeviceObjectPropertyReference o]
-  {:device-identifier (bacnet->clojure (.getDeviceIdentifier o))
-   :object-identifier (bacnet->clojure (.getObjectIdentifier o))
-   :property-array-index (bacnet->clojure (.getPropertyArrayIndex o))
-   :property-identifier (bacnet->clojure (.getPropertyIdentifier o))})
+  (let [data {:device-identifier (bacnet->clojure (.getDeviceIdentifier o))
+              :object-identifier (bacnet->clojure (.getObjectIdentifier o))
+              :property-array-index (bacnet->clojure (.getPropertyArrayIndex o))
+              :property-identifier (bacnet->clojure (.getPropertyIdentifier o))}]
+    [(:device-identifier data)
+     (-> (c-object-property-reference (:object-identifier data)
+                                      [(:property-identifier data)
+                                       (:property-array-index data)])
+         bacnet->clojure)]))
+                                                      
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.EventTransitionBits
   [^EventTransitionBits o]
@@ -454,14 +481,24 @@
   [^ObjectTypesSupported o]
   (bean-map o))
 
+(defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ObjectPropertyReference
+  [^ObjectPropertyReference o]
+  (let [oid (bacnet->clojure (.getObjectIdentifier o))]
+    [oid
+     (->> [(.getPropertyIdentifier o)(.getPropertyArrayIndex o)]
+          (map bacnet->clojure)
+          (c-property-reference)
+          bacnet->clojure)]))
+
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.PriorityValue
   [^PriorityValue o]
   (.getIntegerValue o))
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.PropertyReference
   [^PropertyReference o]
-  [(bacnet->clojure (.getPropertyIdentifier o))
-   (bacnet->clojure (.getPropertyArrayIndex o))])
+  (if-let [property-array-index (bacnet->clojure (.getPropertyArrayIndex o))]
+    [(bacnet->clojure (.getPropertyIdentifier o)) property-array-index]
+    (bacnet->clojure (.getPropertyIdentifier o))))
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.PropertyValue
   [^PropertyValue o]
@@ -490,6 +527,10 @@
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.SequenceOf
   [^SequenceOf o]
   (into [] (map bacnet->clojure o)))
+
+(defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.SetpointReference
+  [^SetpointReference o]
+  (bacnet->clojure (.getSetpointReference o)))
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ServicesSupported
   [^ServicesSupported o]
