@@ -229,3 +229,4 @@
   (->> (for [oid object-identifiers] (cons oid properties))
        vector
        (apply (partial read-properties device-id))))
+

@@ -1,27 +1,16 @@
 (ns bacure.core
-  (:require [bacure.network :as network]
-            [bacure.coerce :as coerce]
-            [bacure.local-save :as save]
-            [bacure.local-device :refer [local-device reset-local-device load-local-device-backup
-                                         local-device-backup save-local-device-backup]]
-            [bacure.remote-device :refer [rd services-supported all-extended-information
-                                          remote-devices discover-network find-remote-devices]]
+  (:require [bacure.local-device :as ld]
+            [bacure.remote-device :as rd]
             [bacure.read-properties :as rp]
-             [clojure.walk :as walk]))
+            [clojure.walk :as walk]))
 
    
 (defn boot-up
   "Create a local-device, load its config file, initialize it, and
   find the remote devices." []
-  (load-local-device-backup)
-  (future (discover-network)) true)
+  (ld/load-local-device-backup)
+  (future (rd/discover-network)) true)
 
-
-(defn remote-devices-and-names
-  "Return a list of vector pair with the device-id and its name.
-   -->  ([1234 \"SimpleServer\"])" []
-  (for [d (remote-devices)]
-    [d (.getName (rd d))]))
 
 (defn find-bacnet-port
   "Scan ports to see if any BACnet device will respond. If the
@@ -42,17 +31,17 @@
   chances of finding them, we reset the local device with a new port
   each time." [&{:keys [delay port-min port-max] :or
                  {delay 500 port-min 47801 port-max 47820}}]
-  (let [configs (local-device-backup)
+  (let [configs (ld/local-device-backup)
         results (->> (for [port (range port-min port-max)]
-                       (do (reset-local-device {:port port :destination-port port})
-                           (find-remote-devices)
+                       (do (ld/reset-local-device {:port port :destination-port port})
+                           (rd/find-remote-devices)
                            (Thread/sleep delay)
-                           (when-let [devices (seq (remote-devices))]
+                           (when-let [devices (seq (rd/remote-devices))]
                              {:port port :devices devices})))
                      (into [])
                      (remove nil?))]
-    (reset-local-device configs)
-    (future (discover-network))
+    (ld/reset-local-device configs)
+    (future (rd/discover-network))
     results))
 
 
@@ -222,6 +211,6 @@
                (-> (find-objects device criteria-map object-identifiers)
                    ((fn [x] (when (seq x)
                               [[:device device] x])))))]
-       (->> (remote-devices)
+       (->> (rd/remote-devices)
             (pmap f) ;; parallel powaaaa
             (into {})))))

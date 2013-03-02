@@ -57,6 +57,11 @@
   (for [rd (seq (.getRemoteDevices @ld/local-device))]
     (.getInstanceNumber rd)))
 
+(defn remote-devices-and-names
+  "Return a list of vector pair with the device-id and its name.
+   -->  ([1234 \"SimpleServer\"])" []
+  (for [d (remote-devices)]
+    [d (.getName (rd d))]))
 
 (defn all-extended-information
   "Make sure that we have the extended information of every known
