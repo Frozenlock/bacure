@@ -43,6 +43,8 @@
             type.constructed.DateTime
             type.constructed.ObjectTypesSupported
             type.constructed.TimeStamp
+            type.constructed.ReadAccessSpecification
+            type.constructed.ReadAccessResult
             type.constructed.StatusFlags
             type.constructed.ServicesSupported
             type.constructed.ShedLevel
@@ -226,7 +228,7 @@
      (last object-identifier)))
 
 (defn c-property-identifier [prop-keyword]
-  (PropertyIdentifier. (get prop-int-map prop-keyword)))
+  (PropertyIdentifier. (map-or-num prop-int-map prop-keyword)))
 
 (defn c-real [value]
   (Real. (float value)))
@@ -250,10 +252,12 @@
   (com.serotonin.bacnet4j.type.primitive.Boolean. bool))
 
 (defn c-unsigned [value]
-  (UnsignedInteger. value))
+  (when value
+    (UnsignedInteger. value)))
 
 (defn c-signed [value]
-  (SignedInteger. value))
+  (when value
+    (SignedInteger. value)))
 
 (defn c-engineering-units [value]
   (EngineeringUnits. (map-or-num  engineering-units-map value)))
@@ -330,7 +334,16 @@
 (defn c-property-value [property-identifier property-value]
   (PropertyValue. property-identifier property-value))
 
-
+(defn c-property-reference
+  "Make a property reference. Argument can be of the forms:
+   [<property-identifer> <array-index>]
+   <property-identifier>"
+  [property-reference]
+  (let [[property-identifier array-index]
+        (if (coll? property-reference)
+          property-reference [property-reference])]
+    (PropertyReference. (c-property-identifier property-identifier)
+                        (c-unsigned array-index))))
 
 ;; DOES NOT WORK! Need to come back to this one
 (defn c-action-command [m]
@@ -356,6 +369,15 @@
 (defn c-action-list [coll]
   (c-array c-action-command coll))
 
+(defn c-read-access-specification
+  "As property-references, will accept:
+   <property-identifier>
+   [<property-identifier> <property-identifier>]
+   [[<property-identifier> <array-index>] [<property-identifier> <array-index>]]"
+  [object-identifier & property-references]
+   (ReadAccessSpecification.
+    (c-object-identifier object-identifier)
+    (c-array c-property-reference property-references)))
 
 ;;================================================================
 ;; Convert to Clojure objects
@@ -436,6 +458,11 @@
   [^PriorityValue o]
   (.getIntegerValue o))
 
+(defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.PropertyReference
+  [^PropertyReference o]
+  [(bacnet->clojure (.getPropertyIdentifier o))
+   (bacnet->clojure (.getPropertyArrayIndex o))])
+
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.PropertyValue
   [^PropertyValue o]
   (into [] (map bacnet->clojure [(.getPropertyIdentifier o)(.getValue o)])))
@@ -444,6 +471,21 @@
   [^TimeStamp o]
   (cond (.isDateTime o) (bacnet->clojure (.getDateTime o))
         :else (throw (Exception. "The time-stamp isn't in a BACnet date-time format."))))
+
+(defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ReadAccessSpecification
+  [^ReadAccessSpecification o]
+  [(bacnet->clojure (.getObjectIdentifier o))
+   (bacnet->clojure (.getListOfPropertyReferences o))])
+
+(defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ReadAccessResult
+  [^ReadAccessResult o]
+  (let [oid (.getObjectIdentifier o)]
+    (for [result (.getValues (.getListOfResults o))]
+      (let [value (try (bacnet->clojure (.getDatum (.getReadResult result)))
+                       (catch Exception e))]
+        (into {}
+              [[:object-identifier (bacnet->clojure oid)]
+               [(bacnet->clojure (.getPropertyIdentifier result)) value]])))))
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.SequenceOf
   [^SequenceOf o]

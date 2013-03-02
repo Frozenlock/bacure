@@ -2,272 +2,13 @@
   (:require [bacure.network :as network]
             [bacure.coerce :as coerce]
             [bacure.local-save :as save]
-            [clojure.walk :as walk]))
+            [bacure.local-device :refer [local-device reset-local-device load-local-device-backup
+                                         local-device-backup save-local-device-backup]]
+            [bacure.remote-device :refer [rd services-supported all-extended-information
+                                          remote-devices discover-network find-remote-devices]]
+            [bacure.read-properties :as rp]
+             [clojure.walk :as walk]))
 
-(import '(com.serotonin.bacnet4j 
-          LocalDevice 
-          RemoteDevice
-          obj.BACnetObject
-          service.confirmed.CreateObjectRequest
-          service.confirmed.DeleteObjectRequest
-          service.unconfirmed.WhoIsRequest
-          type.enumerated.PropertyIdentifier
-          type.primitive.UnsignedInteger))
-
-(defmacro mapify
-  "Given some symbols, construct a map with the symbols as keys, and
-  the value of the symbols as the map values. For example:
- (Let [aa 12]
-     (mapify aa))
- => {:aa 12}"
-  [& symbols]
-  `(into {}
-         (filter second
-                 ~(into []
-                        (for [item symbols]
-                          [(keyword item) item])))))
-
-;; ================
-
-
-(def local-device (atom nil))
-(def local-device-configs (atom {}))
-
-(defn new-local-device
-  "Return a new configured BACnet local device . (A device is required
-   to communicate over the BACnet network.). To terminate it, use the
-   java method `terminate'. If needed, the initial configurations are
-   available in the atom 'local-device-configs.
-
-   The optional config map can contain the following:
-   :device-id <number>
-   :broadcast-address <string>
-   :port <number>
-   :destination-port <number>
-   :local-address <string> <----- You probably don't want to use it.
-   :timeout <number>
-
-   The device ID is the device identifier on the network. It should be
-   unique.
-
-   Port and destination port are the BACnet port, usually 47808.
-
-   The broadcast-address is the address on which we send 'WhoIs'.
-
-   The local-address will default to \"0.0.0.0\", also known as the
-   'anylocal'. (Default by the underlying BACnet4J library.) This is
-   required on Linux and Solaris machines in order to catch packet
-   sent as a broadcast. You can manually change it, but unless you
-   know exactly what you are doing, bad things will happen."
-  ([] (new-local-device nil))
-  ([configs-map]
-     (let [{:keys [device-id broadcast-address port destination-port local-address timeout]
-            :or {device-id 1338 ;;some default configs
-                 broadcast-address (network/get-broadcast-address (network/get-any-ip))
-                 port 47808
-                 destination-port 47808
-                 timeout 1000}}
-           configs-map
-           ld (LocalDevice. device-id broadcast-address local-address)]
-       (.setPort ld port)
-       (.setTimeout ld timeout) ;; increase the default to 20s
-       (reset! local-device ld)
-       (reset! local-device-configs (mapify device-id broadcast-address port
-                                            destination-port local-address timeout))
-       ld)))
-
-
-
-(defn initialize
-  "Initialize the local device. This will bind it to it's port (most
-  likely 47808). The port will remain unavailable until the device is
-  terminated. Once terminated, you should discard the device and
-  create a new one if needed."[]
-  (.initialize @local-device))
-
-(defn terminate
-  "Terminate the local device, freeing any bound port in the process."[]
-  (try (.terminate @local-device)
-       (catch Exception e))) ;if the device isn't initialized, it will throw an error
-
-
-(defn local-objects
-  "Return a list of local objects"[]
-  (mapv coerce/bacnet->clojure
-        (.getLocalObjects @local-device)))
-
-(defn add-object
-  "Add a local object and return it. You should probably just use `add-or-update-object'."
-  [object-map]
-  (let [object-id (coerce/c-object-identifier (:object-identifier object-map))]
-    (try (.addObject @local-device
-                     (BACnetObject. @local-device object-id))
-         (catch Exception e (print (str "caught exception: " (.getMessage e)))))
-    (.getObject @local-device object-id)))
-  
-(defn add-or-update-object
-  "Update a local object properties. Create the object it if not
-  already present. Will not try to modify any :object-type
-  or :object-identifier." [object-map]
-  (let [object-id (coerce/c-object-identifier (:object-identifier object-map))
-        b-obj (or (.getObject @local-device object-id) (add-object object-map))]
-    (doseq [prop (coerce/encode-properties object-map :object-identifier :object-type)]
-      (.setProperty b-obj prop))
-    (coerce/bacnet->clojure b-obj)))
-
-
-(defn remove-object
-  "Remove a local object"
-  [object-map]
-  (.removeObject @local-device
-                 (coerce/c-object-identifier (:object-identifier object-map))))
-
-(defn remove-all-objects
-  "Remove all local object"[]
-  (doseq [o (local-objects)]
-    (remove-object o)))
-
-(defn local-device-backup
-  "Spit all important information about the local device into a map." []
-  (merge @local-device-configs
-         (when @local-device
-           {:objects (local-objects)
-            :port (.getPort @local-device)
-            :retries (.getRetries @local-device)
-            :seg-timeout (.getSegTimeout @local-device)
-            :seg-window (.getSegWindow @local-device)
-            :timeout (.getTimeout @local-device)})))
-;; eventually we should be able to add programs in the local device
-
-(defn reset-local-device
-  "Terminate the local device and discard it. Replace it with a new
-  local device, and apply the same configurations as the previous one.
-  If a map with new configurations is provided, it will be merged with
-  the old config.
-
-  (reset-local-device {:device-id 1112})
-  ---> reset the device and change the device id."
-  ([] (reset-local-device nil))
-  ([new-config]
-     (terminate)
-     (new-local-device (merge (local-device-backup) new-config))
-     (let [configs (local-device-backup)]
-       (doto @local-device
-         (.setRetries (:retries configs))
-         (.setSegTimeout (:seg-timeout configs))
-         (.setSegWindow (:seg-window configs))
-         (.setTimeout (:timeout configs)))
-       (initialize)
-       (doseq [o (or (:objects configs) [])]
-         (add-or-update-object o)))))
-
-(defn clear-all!
-  "Mostly a development function; Destroy all traces of a local-device."[]
-  (terminate)
-  (def local-device (atom nil))
-  (def local-device-configs (atom {})))
-
-
-(defn save-local-device-backup
-  "Save the device backup on a local file and return the config map."[]
-  (save/save-configs (local-device-backup)))
-;; eventually it would be nice to implement the BACnet backup procedure.
-
-
-(defn load-local-device-backup
-  "Load the local-device backup file and reset it with this new
-  configuration." []
-  (reset-local-device (save/get-configs)))
-
-
-(defn remote-devices
-  "Return the list of the current remote devices. These devices must
-  be in the local table. To scan a network, use `discover-network'."
-  []
-  (for [rd (seq (.getRemoteDevices @local-device))]
-    (.getInstanceNumber rd)))
-
-(defn rd
-  "Get the remote device by its device-id"
-  [device-id]
-  (.getRemoteDevice @local-device device-id))
-
-(defn get-services-supported
-  "Return a map of the services supported by the remote device."
-  [device-id]
-  (-> (.getServicesSupported (rd device-id))
-      coerce/bacnet->clojure))
-;; contrary to the bacnet4j library, we won't throw an error when
-;; dealing with devices not yet supporting the post 1995 services.
-
-
-(defn- extended-information
-  "Get the remote device extended information (name, segmentation,
-  property multiple, etc..) if we haven't already."[device-id]
-  (let [device (rd device-id)]
-    (when-not (.getName device)
-      (try (-> @local-device
-               (.getExtendedDeviceInformation device))
-           (catch Exception e
-             ; if there's an error while getting the extended device
-             ; information, just assume that there is almost no
-             ; services supported. (Patch necessary until this
-             ; function is implemented in clojure)
-             (.setSegmentationSupported device (coerce/c-segmentation :unknown))
-             (.setServicesSupported device (coerce/c-services-supported {:read-property true}))))
-      ;; and now update the services supported to be compatible with pre 1995 BACnet
-      (->> (get-services-supported device-id)
-           coerce/c-services-supported
-           (.setServicesSupported device)))))
-
-
-(defn all-extended-information
-  "Make sure that we have the extended information of every known
-   remote devices.
-
-   Can be used some time the network discovery mechanism, as some
-   devices might take a while to answer the WhoIs." []
-   (doseq [device (remote-devices)]
-     (extended-information device)))
-
-(defn- find-remote-devices
-  "We find remote devices by sending a 'WhoIs' broadcast. Every device
-  that responds is added to the remote-devices field in the
-  local-device. WARNING: This won't ask the device if it supports
-  read-property-multiple. Thus, any property read based solely on this
-  remote device discovery might fail. The use of `discover-network' is
-  highly recommended, even if it might take a little longer to
-  execute." [&[{:keys [min-range max-range dest-port]
-      :or {dest-port (:destination-port @local-device-configs)}}]]
-  (.sendBroadcast @local-device
-                  dest-port (if (or min-range max-range)
-                              (WhoIsRequest.
-                               (UnsignedInteger. (or min-range 0))
-                               (UnsignedInteger. (or max-range 4194304)))
-                              (WhoIsRequest.))))
-
-(defn- find-remote-devices-and-extended-information
-  "Sends a WhoIs. For every device discovered,
-  get its extended information. Return the remote devices as a list."
-  [&[{:keys [min-range max-range dest-port] :as args}]]
-  (find-remote-devices args)
-  (Thread/sleep 500) ;wait a little to insure we get the responses
-  (all-extended-information)
-  (remote-devices))
-
-(defn discover-network
-  "Find remote devices and their extended info. By default, will try
-   up to 5 time if not a single device answer. Return the list of
-   remote-devices.
-
-   Should be called in a future call to avoid `hanging' the program
-   while waiting for the remote devices to answer."
-  ([] (discover-network 5))
-  ([tries]
-     (dorun
-      (->> (repeatedly tries find-remote-devices-and-extended-information)
-           (take-while empty?)))
-     (seq (remote-devices))))
    
 (defn boot-up
   "Create a local-device, load its config file, initialize it, and
@@ -319,83 +60,6 @@
 ;; Remote objects related functions
 ;; ================================================================
 
-
-(defn create-remote-object
-  "Send a 'create object request' to the remote device."
-  [device-id object-map]
-  (.send @local-device (rd device-id)
-         (CreateObjectRequest. (coerce/c-object-identifier (:object-identifier object-map))
-                               (coerce/encode-properties object-map :object-type :object-identifier
-                                                         :object-list))))
-
-(defn delete-remote-object
-  "Send a 'delete object' request to a remote device."
-  [device-id object-identifier]
-  (.send @local-device (rd device-id)
-         (DeleteObjectRequest. (coerce/c-object-identifier object-identifier))))
-
-
-;;;; This `read property' section would really benefit from converting
-;;;; lower order functions to clojure.
-
-(defn- replace-special-identifier
-  "For devices that don't support the special identifiers 
-   (i.e. :all, :required and :optional), return a list of properties.
-
-   The :all won't be as the one defined by the BACnet standard,
-   because we can't know for sure what are the properties. (Especially
-   in the case of proprietary objects." [object-identifier properties]
-   (-> (fn [x] (if (#{:all :required :optional} x)
-                 (coerce/properties-by-option (first object-identifier) x) x))
-       (walk/postwalk properties)
-       flatten))
-
-(defn- read-properties [device-id refs]
-  (.readProperties @local-device (rd device-id) refs))
-
-(defn- retrieve-prop-merge-all
-  [device-id object-identifiers prop-identifiers]
-  (let [rpm (:read-property-multiple (get-services-supported device-id))
-        refs (com.serotonin.bacnet4j.util.PropertyReferences.)]
-    (doseq [object-identifier object-identifiers]
-      (let [oid (coerce/c-object-identifier object-identifier)
-            pids (if-not rpm (replace-special-identifier object-identifier
-                                                         prop-identifiers)
-                         prop-identifiers)]
-        (doseq [prop-id pids]
-          (.add refs oid (coerce/make-property-identifier prop-id)))))
-    (coerce/bacnet->clojure (read-properties device-id refs))))
-
-(defn- retrieve-prop-per-object
-  [device-id object-identifiers prop-identifiers]
-  (apply concat
-         (for [object-identifier object-identifiers]
-           (let [rpm (:read-property-multiple (get-services-supported device-id))
-                 refs (com.serotonin.bacnet4j.util.PropertyReferences.)
-                 oid (coerce/c-object-identifier object-identifier)
-                 pids (if-not rpm (replace-special-identifier object-identifier
-                                                              prop-identifiers)
-                              prop-identifiers)]
-             (doseq [prop-id pids]
-               (.add refs oid (coerce/make-property-identifier prop-id)))
-             (coerce/bacnet->clojure (read-properties device-id refs))))))
-  
-(defn- retrieve-prop-fn-chooser
-  "Return a function to retrieve properties values. How the data is
-  fetched is determined by the remote-device's segmentation support.
-
-  If segmentation is supported, retrieve every objects at once. If it
-  isn't, retrieve them one at the time." [device-id]
-  (let [segmentation (coerce/bacnet->clojure
-                      (.getSegmentationSupported (rd device-id)))]
-    (cond
-     (= segmentation :both) retrieve-prop-merge-all
-     ; there is also :transmit and :receive
-     :else retrieve-prop-per-object)))
-      
-
-;(if-not (:read-property-multiple (get-services-supported device-id))
-
 (defn remote-object-properties-with-nil
   "Query a remote device and return the properties values
    Example: (object-properties-values 1234 [:analog-input 0] :all)
@@ -407,9 +71,8 @@
    You probably want to use `remote-object-properties'."
   [device-id object-identifiers properties]
   (let [object-identifiers ((fn[x] (if ((comp coll? first) x) x [x])) object-identifiers)
-        properties ((fn [x] (if (coll? x) x [x])) properties)
-        prop-fn (retrieve-prop-fn-chooser device-id)]
-    (prop-fn device-id object-identifiers properties)))
+        properties ((fn [x] (if (coll? x) x [x])) properties)]
+    (rp/read-properties-multiple-objects device-id object-identifiers properties)))
 
 (defn remote-object-properties
   "Query a remote device and return the properties values
@@ -436,17 +99,6 @@
   "Return a list of maps of every objects and their properties."
   [device-id]
   (remote-object-properties device-id (remote-objects device-id) :all))
-
-(defn set-remote-properties
-  "Set all the given objects properties in the remote device."
-  [device-id properties-map]
-  (let [remote-device (rd device-id)
-        encoded-properties (coerce/encode properties-map)]
-    (doseq [prop (dissoc encoded-properties :object-type :object-identifier :object-list)]
-      (.setProperty @local-device remote-device
-                    (:object-identifier encoded-properties)
-                    (coerce/make-property-identifier (key prop))
-                    (val prop)))))
 
 (defn get-device-id
   "Return the device-id from a device-map (bunch of properties).
@@ -532,13 +184,16 @@
      same property is retrieved in a single request. For example, the
      `description' property for 3 different objects would be merged
      into a single request."
-  ([device-id criteria-map] (find-objects device-id criteria-map (remote-objects device-id)))
+  ([device-id criteria-map]
+     (find-objects device-id criteria-map (remote-objects device-id)))
   ([device-id criteria-map object-identifiers]
      (let [properties (keys criteria-map)
+           object-identifiers (or object-identifiers (remote-objects device-id))
            init-map (map #(hash-map :object-identifier %) object-identifiers)
-           update-and-filter (fn [m p]
-                               (when-let [updated-object-map (update-objects-maps device-id m p)]
-                                 (filter (where-or-not-found criteria-map) updated-object-map)))]
+           update-and-filter
+           (fn [m p]
+             (when-let [updated-object-map (update-objects-maps device-id m p)]
+               (filter (where-or-not-found criteria-map) updated-object-map)))]
        (reduce update-and-filter
                init-map
                properties))))
@@ -556,16 +211,17 @@
    (keys <result>).
 
    Criteria-map example:
-   {:present-value #(> % 10) :object-name #\"(?i)analog\" :model-name \"GNU\"}"
+   {:present-value #(> % 10) :object-name #\"(?i)analog\" :model-name \"GNU\"}
+
+   All remote devices are queried simultaneously (or as much as the
+   local-device can allow)."
   ([criteria-map]
-     (into {}
-           (for [device (remote-devices)]
-             (-> (find-objects device criteria-map)
-                 ((fn [x] (when (seq x)
-                            [[:device device] x])))))))
+     (find-objects-everywhere criteria-map nil))
   ([criteria-map object-identifiers]
-     (into {}
-           (for [device (remote-devices)]
-             (-> (find-objects device criteria-map object-identifiers)
-                 ((fn [x] (when (seq x)
-                            [[:device device] x]))))))))
+     (letfn [(f [device]
+               (-> (find-objects device criteria-map object-identifiers)
+                   ((fn [x] (when (seq x)
+                              [[:device device] x])))))]
+       (->> (remote-devices)
+            (pmap f) ;; parallel powaaaa
+            (into {})))))
