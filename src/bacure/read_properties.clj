@@ -221,7 +221,7 @@
     (->> object-property-references
          replace-special-identifier
          expand-obj-prop-ref
-         (apply read-individually))))
+         (apply (partial read-individually device-id)))))
 
 (defn read-properties-multiple-objects
   "A convenience function to retrieve properties for multiple
