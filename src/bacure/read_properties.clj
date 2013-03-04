@@ -187,9 +187,10 @@
   (->> (for [opr (split-opr partitioned-array)]
          (read-property-multiple device-id opr))
        (apply concat)
-       (apply (fn [x y] (let [oid (find x :object-identifier)]
-                          (apply (partial merge-with concat)
-                                 (map #(dissoc % :object-identifier) [x y])))))))
+       (apply (fn [& results]
+                (let [oid (find (first results) :object-identifier)]
+                  (apply (partial merge-with concat)
+                         (map #(dissoc % :object-identifier) results)))))))
   
 
 (defn read-property-multiple
