@@ -206,10 +206,9 @@
    trying to read is an array. It will be divided and read in chunks."
   [device-id obj-prop-references]
   (->> (try (read-property-multiple* device-id obj-prop-references)
-            (catch AbortAPDUException e
+            (catch Exception e
               (cond
                (not *nil-on-APDU-exception*) (throw e)
-               (not (size-related? e)) nil
                (> (count obj-prop-references) 1) :obj-prop-ref-size-problem
                
                (not (coll? ((comp first next first) obj-prop-references))) ;;not already an array index
