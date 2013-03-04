@@ -230,7 +230,12 @@
      (last object-identifier)))
 
 (defn c-property-identifier [prop-keyword]
-  (PropertyIdentifier. (map-or-num prop-int-map prop-keyword)))
+  (PropertyIdentifier.
+   (if (keyword? prop-keyword)
+     (if-let [[_ n] (re-find #"unknown-(\d+)" (name prop-keyword))]
+       (read-string n)
+       (get prop-int-map prop-keyword))
+     prop-keyword)))
 
 (defn c-real [value]
   (Real. (float value)))
