@@ -519,10 +519,13 @@
   (let [oid (.getObjectIdentifier o)]
     (for [result (.getValues (.getListOfResults o))]
       (let [value (try (bacnet->clojure (.getDatum (.getReadResult result)))
-                       (catch Exception e))]
+                       (catch Exception e))
+            property-reference
+            (c-property-reference (map bacnet->clojure [(.getPropertyIdentifier result)
+                                                        (.getPropertyArrayIndex result)]))]
         (into {}
               [[:object-identifier (bacnet->clojure oid)]
-               [(bacnet->clojure (.getPropertyIdentifier result)) value]])))))
+               [(bacnet->clojure property-reference) value]])))))
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.SequenceOf
   [^SequenceOf o]

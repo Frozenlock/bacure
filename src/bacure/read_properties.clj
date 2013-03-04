@@ -10,6 +10,7 @@
           service.confirmed.ReadPropertyMultipleRequest
           type.constructed.ReadAccessSpecification
           type.enumerated.AbortReason
+          type.enumerated.ErrorCode
           util.PropertyValues
           util.PropertyReferences
           exception.AbortAPDUException
@@ -53,21 +54,23 @@
         [(.intValue AbortReason/bufferOverflow)
          (.intValue AbortReason/segmentationNotSupported)]))
 
-(defn partition-arrays
+(defn partition-array
   "Ask the remote device what is the length of the BACnet array and
-  return as many object-property-identifiers."
-  [device-id object-identifier property-reference]
-  (let [size (read-single-property device-id object-identifier
-                                   [property-reference 0])] ;; 0 return the array length
-    (into []
-          (for [index (range 1 (inc size))]
-            [object-identifier [property-reference index]]))))
+  return as many object-property-identifiers. If object is not an
+  array, return nil." [device-id object-identifier property-reference]
+  (try
+    (let [size (read-single-property device-id object-identifier
+                                     [property-reference 0])] ;; 0 return the array length
+      (into []
+            (for [index (range 1 (inc size))]
+              [object-identifier [property-reference index]])))
+    (catch ErrorAPDUException e)))
 
 (defn read-array-individually
   "Read a BACnet array one time at the time and re-assemble the result
   afterward." [device-id object-identifier property-reference]
   (mapv (partial apply (partial read-single-property device-id))
-        (partition-arrays device-id object-identifier property-reference)))
+        (partition-array device-id object-identifier property-reference)))
       
 (defn read-single-property-with-fallback
   "Read a single property. If there's a size-related APDU error, will
@@ -131,6 +134,27 @@
    (c/c-array (partial apply c/c-read-access-specification)
               obj-prop-references)))
 
+(defn BACnet-array?
+  "Return true if the raw data returned by a read property is part of
+  an array."[data]
+  (->> (dissoc data :object-identifier) keys first coll?))
+
+(defn assemble-arrays
+  "Reassemble arrays from data returned from a
+  read-property-multiple." [data]
+  (let [sort-fn (fn [x] (sort-by #(first (keys (dissoc % :object-identifier))) x))
+        grouped-by-properties
+        (group-by (juxt :object-identifier
+                        (comp ffirst keys #(dissoc % :object-identifier))) data)]
+    ;; group-by --> [[:device 1234] :object-list] --> [<object-identifier> <property-type>]
+    (for [values grouped-by-properties]
+      (let [object-identifier (ffirst values)
+            property-type (second (first values))]
+        (->> (second values)
+             (map #(first (vals (dissoc % :object-identifier))))
+             ((fn [x] (if (> (count x) 1) x (first x))))
+             ((fn [x] {:object-identifier object-identifier
+                       property-type x})))))))
 
 (defn read-property-multiple*
   "read-access-specification should be of the form:
@@ -144,15 +168,29 @@
               (.getListOfReadAccessResults)
               (mapcat c/bacnet->clojure)))
        (apply concat)
+       (group-by BACnet-array?)
+       ((fn [x] (concat (assemble-arrays (get x true)) (get x false))))
        (group-by :object-identifier)
        vals
        (map (partial apply merge))))
 
 
 
-(defn split-obr [obj-prop-references]
+(defn split-opr [obj-prop-references]
   (split-at (/ (count obj-prop-references) 2) obj-prop-references))
 
+(declare read-property-multiple)
+
+(defn read-array-in-chunks
+  "Read the partitioned arrays in chunks and then assemble them back
+  together." [device-id partitioned-array]
+  (->> (for [opr (split-opr partitioned-array)]
+         (read-property-multiple device-id opr))
+       (apply concat)
+       (apply (fn [x y] (let [oid (find x :object-identifier)]
+                          (apply (partial merge-with concat)
+                                 (map #(dissoc % :object-identifier) [x y])))))))
+  
 
 (defn read-property-multiple
   "read-access-specification should be of the form:
@@ -161,21 +199,30 @@
 
    In case of an APDU size problem, will divide the request in two
    parts. If any of those two parts have a problem, it will be split
-   again, and so on and so forth."
-    [device-id obj-prop-references]
+   again, and so on and so forth.
+
+   If the object-property-references is a single item and there's
+   still an APDU size problem, it probably means the property we are
+   trying to read is an array. It will be divided and read in chunks."
+  [device-id obj-prop-references]
   (->> (try (read-property-multiple* device-id obj-prop-references)
             (catch AbortAPDUException e
-              (if (size-related? e)
-                (when (> (count obj-prop-references) 1)
-                  :size-problem)
-                (when-not *nil-on-APDU-exception*
-                  (throw e)))))
-       ((fn [x] (if (= x :size-problem)
-                  (->> (for [opr (split-obr obj-prop-references)]
-                         (read-property-multiple device-id opr))
-                       (apply concat)
-                       (remove nil?))
-                  x)))))
+              (cond
+               (not *nil-on-APDU-exception*) (throw e)
+               (not (size-related? e)) nil
+               (> (count obj-prop-references) 1) :obj-prop-ref-size-problem
+               
+               (not (coll? ((comp first next first) obj-prop-references))) ;;not already an array index
+               {:partitioned-array (apply (partial partition-array device-id)
+                                          (first obj-prop-references))})))
+       ((fn [x] (cond (= x :obj-prop-ref-size-problem)
+                      (->> (for [opr (split-opr obj-prop-references)]
+                             (read-property-multiple device-id opr))
+                           (apply concat)
+                           (remove nil?))
+                      (map? x)
+                      (read-array-in-chunks device-id (:partitioned-array x))
+                      :else x)))))
 
 ;; ================================================================
 ;; ===========  Abstract the differences between the two ==========
