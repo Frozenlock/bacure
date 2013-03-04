@@ -221,7 +221,7 @@
                            (apply concat)
                            (remove nil?))
                       (map? x)
-                      (read-array-in-chunks device-id (:partitioned-array x))
+                      [(read-array-in-chunks device-id (:partitioned-array x))]
                       :else x)))))
 
 ;; ================================================================
