@@ -54,8 +54,11 @@
   "Return the list of the current remote devices. These devices must
   be in the local table. To scan a network, use `discover-network'."
   []
-  (for [rd (seq (.getRemoteDevices @ld/local-device))]
-    (.getInstanceNumber rd)))
+  (try
+    (for [rd (seq (.getRemoteDevices @ld/local-device))]
+      (.getInstanceNumber rd))
+    (catch Exception e))) ;; if there isn't any remote device, throws
+                          ;; a null exception
 
 (defn remote-devices-and-names
   "Return a list of vector pair with the device-id and its name.
