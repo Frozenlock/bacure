@@ -33,7 +33,8 @@
 (defn extended-information?
   "True if we already have the device extended information, nil
   otherwise." [device-id]
-  (.getName (rd device-id)))
+  (when-let [device (rd device-id)]
+    (.getName device)))
 
 (defn extended-information
   "Get the remote device extended information (name, segmentation,
@@ -79,7 +80,8 @@
    some devices might take a while to answer the WhoIs.
 
    Remote devices are queried in parallel." []
-   (doall (pmap extended-information (remote-devices))))
+   (try (doall (pmap extended-information (remote-devices)))
+        (catch Exception e)))
 
 
 (defn find-remote-devices
