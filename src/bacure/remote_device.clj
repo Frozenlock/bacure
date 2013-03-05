@@ -30,12 +30,17 @@
   (-> (.getSegmentationSupported (rd device-id))
       coerce/bacnet->clojure))
 
+(defn extended-information?
+  "True if we already have the device extended information, nil
+  otherwise." [device-id]
+  (.getName (rd device-id)))
+
 (defn extended-information
   "Get the remote device extended information (name, segmentation,
   property multiple, etc..) if we haven't already."
   [device-id]
   (let [device (rd device-id)]
-    (when-not (.getName device)
+    (when-not (extended-information? device)
       (try (-> @ld/local-device
                (.getExtendedDeviceInformation device))
            (catch Exception e
