@@ -231,7 +231,8 @@
                              (read-property-multiple device-id opr))
                            (apply concat)
                            (remove nil?))
-                      (= x :expand-obj-prop-ref) (read-property-multiple device-id (expand-obj-prop-ref opr))
+                      (= x :expand-obj-prop-ref) (read-property-multiple
+                                                  device-id (expand-obj-prop-ref obj-prop-references))
                       (map? x) [(read-array-in-chunks device-id (:partitioned-array x))]
                       :else x)))))
 
