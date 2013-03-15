@@ -416,6 +416,17 @@
 (defmethod bacnet->clojure :default [x]
   (str "No method YET for " (.toString x)))
 
+;; methods for type 'acknowledgement'
+
+(defmethod bacnet->clojure com.serotonin.bacnet4j.service.acknowledgement.ReadPropertyAck
+  [^ReadPropertyAck o]
+  (let [property-identifier (.getPropertyIdentifier o)
+        value (.getValue o)]
+    (->> (if (= (class value) AmbiguousValue)
+           (.convertTo value (class property-identifier))
+           value)
+         bacnet->clojure)))
+
 ;; methods for type 'constructed'
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.AccumulatorRecord

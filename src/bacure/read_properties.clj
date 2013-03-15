@@ -45,9 +45,7 @@
   "Read a single property."
   [device-id object-identifier property-reference]
   (->> (read-property-request object-identifier property-reference)
-       (send-request device-id)
-       (.getValue)
-       c/bacnet->clojure))
+       (send-request device-id)))
 
 (defn size-related? [apdu-exception]
   (some #{(.getAbortReason (.getApdu apdu-exception))}
@@ -84,8 +82,7 @@
 
   
 (defn read-individually
-  "Given a list of object-property-references, return a map or
-  properties.
+  "Given a list of object-property-references, return a list of properties maps.
 
   [[[:analog-input 0] :description]
    [[:analog-input 1] :object-name]
@@ -191,7 +188,20 @@
                 (let [oid (find (first results) :object-identifier)]
                   (apply (partial merge-with concat)
                          (map #(dissoc % :object-identifier) results)))))))
-  
+
+(defn expand-obj-prop-ref
+  "Take a normal object-property-references, such as
+
+   [ [[:analog-input 0] :description :object-name] ...]
+
+   and separate the properties into individual references to obtain:
+   [ [[:analog-input 0] :description]
+     [[:analog-input 0] :object-name] ...]"
+  [obj-prop-refs]
+  (->> (for [[oid & prop-refs] obj-prop-refs]
+         (map (fn [x] [oid x]) prop-refs))
+       (apply concat)))
+
 
 (defn read-property-multiple
   "read-access-specification should be of the form:
@@ -211,7 +221,8 @@
               (cond
                (not *nil-on-APDU-exception*) (throw e)
                (> (count obj-prop-references) 1) :obj-prop-ref-size-problem
-               
+               ((comp seq rest rest first) obj-prop-references) ;; multiple property-identifier?
+               :expand-obj-prop-ref ;;expand them before we try an array read.
                (not (coll? ((comp first next first) obj-prop-references))) ;;not already an array index
                {:partitioned-array (apply (partial partition-array device-id)
                                           (first obj-prop-references))})))
@@ -220,8 +231,8 @@
                              (read-property-multiple device-id opr))
                            (apply concat)
                            (remove nil?))
-                      (map? x)
-                      [(read-array-in-chunks device-id (:partitioned-array x))]
+                      (= x :expand-obj-prop-ref) (read-property-multiple device-id (expand-obj-prop-ref opr))
+                      (map? x) [(read-array-in-chunks device-id (:partitioned-array x))]
                       :else x)))))
 
 ;; ================================================================
@@ -242,18 +253,6 @@
        (cons object-identifier
              (distinct (for [prop properties new-prop (f prop)] new-prop))))))
 
-(defn expand-obj-prop-ref
-  "Take a normal object-property-references, such as
-
-   [ [[:analog-input 0] :description :object-name] ...]
-
-   and separate the properties into individual references to obtain:
-   [ [[:analog-input 0] :description]
-     [[:analog-input 0] :object-name] ...]"
-  [obj-prop-refs]
-  (->> (for [[oid & prop-refs] obj-prop-refs]
-         (map (fn [x] [oid x]) prop-refs))
-       (apply concat)))
 
 (defn read-properties
   "Retrieve the property values form a remote device.
