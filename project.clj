@@ -1,4 +1,4 @@
-(defproject bacure "0.3.17"
+(defproject bacure "0.3.18"
   :description "A Clojure wrapper for the BAC4j library"
   :url "https://bacnethelp.com"
   :license {:name "GNU General Public License V3"
