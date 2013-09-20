@@ -577,7 +577,9 @@
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.primitive.Real
   [^Real o]
-  (.floatValue o))
+  (let [value (.floatValue o)]
+    (when (== value value) ;; Sometimes the java.lang.float can be NaN (not a number).
+      value)))             ;; The equality test can filter them out.
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.primitive.ObjectIdentifier
   [^ObjectIdentifier o]
