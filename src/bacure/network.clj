@@ -20,9 +20,9 @@
        (map #(.getHostAddress %))
        (remove nil?)))
 
+
 (defn interfaces-and-ips
   "Return a list of interfaces and their IPs.
-
    ({:interface \"wlan0\", :ips (\"192.168.0.2\")})"[]
   (let [interfaces (get-interfaces)]
     (->> (for [i interfaces]
@@ -34,10 +34,22 @@
   "Return the first IPv4 found." []
   (-> (interfaces-and-ips) first :ips first))
 
+(defn get-broadcast-address-of-interface [interface]
+  (->> (map #(.getBroadcast %) (.getInterfaceAddresses interface))
+       (remove nil?)
+       (map #(.getHostAddress %))
+       first))
+
+(defn get-interface-from-ip 
+  "Given an IP address, return the interface."
+  [ip]
+  (java.net.NetworkInterface/getByInetAddress (java.net.Inet4Address/getByName ip)))
+
 (defn get-broadcast-address
-  "Given a local-ip, return the most probable broadcast address"
+  "Given a local-ip, return the broadcast address"
   [local-ip]
-  (join "." (concat (take 3 (split local-ip #"\.")) ["255"])))
+  (->> (get-interface-from-ip local-ip)
+       get-broadcast-address-of-interface))
 
 (defn resolve-dns
   "Return the IP of a given url, or simply return the IP unchanged"
