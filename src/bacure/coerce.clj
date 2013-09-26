@@ -50,17 +50,22 @@
             type.constructed.StatusFlags
             type.constructed.ServicesSupported
             type.constructed.ShedLevel
+            type.enumerated.BinaryPV
+            type.enumerated.DeviceStatus
             type.enumerated.EngineeringUnits            
             type.enumerated.EventState
             type.enumerated.NotifyType
             type.enumerated.ObjectType
+            type.enumerated.Polarity
             type.enumerated.PropertyIdentifier
             type.enumerated.Segmentation
+            type.enumerated.ShedState
             type.enumerated.Reliability
             type.primitive.CharacterString
             type.primitive.ObjectIdentifier
             type.primitive.Real
             type.primitive.UnsignedInteger
+            type.primitive.Unsigned16
             type.primitive.SignedInteger
             type.primitive.Date
             type.primitive.Time
@@ -71,9 +76,19 @@
             obj.ObjectProperties)
            (java.util ArrayList List)))
 
+;; In this part of the code we are doing conversions between the
+;; Java/BACnet datatypes (real, object-identifier,
+;; character-string...) and the usual Clojure ones. This is done to
+;; abstract away knowledge that isn't useful to the end user.
+
+;; In simpler terms, a user can simply enter the number '10' and we
+;; will convert it automatically to the correct datatype (real,
+;; unsigned-16...) before sending it on the network.
+
 
 (def ^:dynamic *drop-ambiguous*
   "Ambiguous values will be dropped unless this is bound to false." true)
+
 
 ;; functions to convert between camel-case and a more clojure-like style
 
@@ -109,7 +124,9 @@
 
 
 (def prop-int-map
-  (subclass-to-map PropertyIdentifier))
+  (merge (subclass-to-map PropertyIdentifier)
+         ;; somehow there's some properties missing...
+         {:backup-and-restore-state 338}))
 
 (defn make-property-identifier [prop-keyword]
   (PropertyIdentifier. (get prop-int-map prop-keyword)))
@@ -140,6 +157,16 @@
    :under-range 3
    :unreliable-other 7})
 
+(def device-status-map
+  "The .toString method doesn't return the name, but instead the
+  string version of an integer. Thus we have to hardcode the names."
+  {:backup-in-progress 5
+   :download-in-progress 3
+   :download-required 2
+   :non-operational 4
+   :operational 0
+   :operational-read-only 1})
+
 (def accumulator-status-map
   "The .toString method doesn't return the name, but instead the
   string version of an integer. Thus we have to hardcode the names."
@@ -148,6 +175,20 @@
    :recovered 2
    :abnormal 3
    :failed 4})
+
+(def polarity-map
+  "The .toString method doesn't return the name, but instead the
+  string version of an integer. Thus we have to hardcode the names."
+  {:normal 0
+   :reverse 1})
+
+(def shed-state-map
+  "The .toString method doesn't return the name, but instead the
+  string version of an integer. Thus we have to hardcode the names."
+  {:compliant 2
+   :inactive 0
+   :non-compliant 3
+   :request-pending 1})
 
 (def services-list
   "List of services associated with their bit-string value. We need to
@@ -222,6 +263,7 @@
        (get obj-int-map object-type))
      object-type)))
 
+
 (defn c-object-identifier
   "Make an object identifier."
   [object-identifier]
@@ -237,19 +279,32 @@
        (get prop-int-map prop-keyword))
      prop-keyword)))
 
+(defn c-polarity [value]
+  (Polarity. (or (map-or-num polarity-map value) 0)))
+
 (defn c-real [value]
   (Real. (float value)))
 
 (defn c-character-string [value]
   (CharacterString. value))
 
-(defn c-status-flag [{:keys[in-alarm fault overridden out-of-service]
+(defn c-status-flags [{:keys[in-alarm fault overridden out-of-service]
                       :or {in-alarm false fault false overridden false out-of-service false}}]
   (StatusFlags. in-alarm fault overridden out-of-service))
+
+(defn c-status-flags [{:keys[in-alarm fault overridden out-of-service]
+                      :or {in-alarm false fault false overridden false out-of-service false}}]
+  (StatusFlags. in-alarm fault overridden out-of-service))
+
+(defn c-shed-state [value]
+  (ShedState. (or (map-or-num shed-state-map value) 0)))
 
 (defn c-event-state [value]
   (let [subclass-map (subclass-to-map EventState)]
     (EventState. (get subclass-map value 0))))
+
+(defn c-device-status [value]
+  (DeviceStatus. (or (map-or-num device-status-map value) 4)))
 
 (defn c-reliability [value]
   (let [subclass-map reliability-map]
@@ -261,6 +316,12 @@
 (defn c-unsigned [value]
   (when value
     (UnsignedInteger. value)))
+
+(defn c-unsigned16 [value]
+  (Unsigned16. value))
+
+(defn c-unsigned-integer [value]
+  (c-unsigned value))
 
 (defn c-signed [value]
   (when value
@@ -352,6 +413,7 @@
     (PropertyReference. (c-property-identifier property-identifier)
                         (c-unsigned array-index))))
 
+
 (defn c-object-property-reference [[object-identifier property-reference]]
   (let [prop-ref (c-property-reference property-reference)]
     (ObjectPropertyReference. (c-object-identifier object-identifier)
@@ -392,6 +454,20 @@
   [c-fn coll]
   (SequenceOf. (ArrayList. (map c-fn coll))))
 
+
+;; (defn c-bacnet-object [object-identifier]
+;;   (com.serotonin.bacnet4j.obj.BACnetObject. 
+;;    @bacure.local-device/local-device (c-object-identifier object-identifier)))
+
+(defn c-binary-pv [binary-value]
+  (BinaryPV. (if binary-value 1 0)))
+
+(defn c-priority-value [priority-value]
+  (PriorityValue. (c-binary-pv priority-value)))
+
+(defn c-priority-array [priority-values]
+  (PriorityArray. (into [] (map c-priority-value priority-values))))
+
 (defn c-action-list [coll]
   (c-array c-action-command coll))
 
@@ -404,6 +480,7 @@
    (ReadAccessSpecification.
     (c-object-identifier object-identifier)
     (c-array c-property-reference property-references)))
+
 
 ;;================================================================
 ;; Convert to Clojure objects
@@ -442,6 +519,12 @@
               (filter (comp #{(.intValue o)} val))
               (map key))))
 ;(bacnet->clojure (c-accumulator {:timestamp (.toString (clj-time.core/now)) :present-value 0 :accumulated-value 10 :accumulator-status :normal}))  
+
+(defmethod bacnet->clojure com.serotonin.bacnet4j.type.enumerated.DeviceStatus
+  [^DeviceStatus o]
+  (first (->> device-status-map
+              (filter (comp #{(.intValue o)} val))
+              (map key))))
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ActionCommand
   [^ActionCommand o]
@@ -559,7 +642,7 @@
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ShedLevel
   [^ShedLevel o]
-  (bacnet->clojure (.getPercent o)))
+  (bacnet->clojure (.getAmount o)))
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.StatusFlags
   [^StatusFlags o]
@@ -638,10 +721,21 @@
   [^NotifyType o]
   (.intValue o))
 
+(defmethod bacnet->clojure com.serotonin.bacnet4j.type.enumerated.Polarity
+  [^Polarity o]
+  (first (->> polarity-map
+              (filter (comp #{(.intValue o)} val))
+              (map key))))
+
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.enumerated.PropertyIdentifier
   [^PropertyIdentifier o]
   (string-name-to-keyword o))
 
+(defmethod bacnet->clojure com.serotonin.bacnet4j.type.enumerated.ShedState
+  [^ShedState o]
+  (first (->> shed-state-map
+              (filter (comp #{(.intValue o)} val))
+              (map key))))
 
 ;; methods for 'util'
 
@@ -702,11 +796,20 @@
 
 (defmethod bacnet->clojure nil [_] nil)
 
+(defmethod bacnet->clojure clojure.lang.PersistentVector
+  [^clojure.lang.PersistentVector o]
+  o)
+  
+
 ;; methods for java
 
 (defmethod bacnet->clojure java.util.ArrayList
   [^ArrayList o]
   (map bacnet->clojure (seq o)))
+
+(defmethod bacnet->clojure java.lang.String
+  [^String o]
+  o)
 
 ;;================================================================
 
@@ -714,7 +817,7 @@
   "Given an object type, return the properties it should have, and if
    they are :required, :optional, or :sequence." [object-type]
    (->> (ObjectProperties/getRequiredPropertyTypeDefinitions
-         (c-object-type :analog-input))
+         (c-object-type object-type))
         (map bacnet->clojure)))
 
 (defn properties-by-option
@@ -725,8 +828,50 @@
     (->> (if (= option :all) profile
              (filter (comp option last) profile))
          (map first))))
-  
-   
+
+(defn determine-property-value-type 
+  "Given an object-type and a property-identifier, return a map with the :type and if it's a :sequence."
+  [object-type property-identifier]
+  (let [type-def (ObjectProperties/getPropertyTypeDefinition
+                  (c-object-type object-type) (c-property-identifier property-identifier))]
+    {:type (->> (.getSimpleName (.getClazz type-def))
+                from-camel
+                str/lower-case)
+     :sequence (.isSequence type-def)}))
+;; We use the value type already associated to each property/object combo in the underlying Java library.
+;; At this point building our own lookup table would be trivial, but there's no point in duplicating the work.
+
+
+(defn encode-property 
+  "Encode the property value depending on what type it should be given the object."
+  [object-type property-identifier value]
+  (let [value-type (determine-property-value-type object-type property-identifier)
+        encode-fn (ns-resolve 'bacure.coerce
+                              (symbol (str "c-" (:type value-type))))]
+    (if (:sequence value-type)
+      (c-array encode-fn value)
+      (encode-fn value))))
+;; We assume that the correct encoding function is the class name with
+;; "c-" as a prefix. For example, for the class "real", the encoding
+;; function would be "c-real".
+
+
+
+(defn encode-properties-values [obj-map]
+  (let [o-t (:object-type obj-map)]
+    (into {}
+          (for [[property value] obj-map]
+            (try 
+              [property (encode-property o-t property value)]
+              (catch Exception e (println (str "*** " property " ***"))))))))
+       
+(defn encode-properties
+  "Encode an object map into a sequence of bacnet4j property-values.
+  Remove-keys can be used to remove read-only properties before
+  sending a command." [obj-map & remove-keys]
+  (let [encoded-values-map (apply dissoc (cons (encode-properties-values obj-map) remove-keys))]
+    (c-array #(c-property-value (make-property-identifier (key %)) (val %)) encoded-values-map)))
+
 
 
 ;; here we associate, for every object, what datatype-fn should be
@@ -736,103 +881,15 @@
 ;; Perhaps I won't have to make my own datatype/object-properties table!
 
 
-(defn encode-properties-values
-  "Given an object-map, return a map of the encoded properties. Will
-  ignore any property that is not defined for a given object type."
-  [obj-map encode-fns]
-  (into {}
-        (for [current-property encode-fns]
-          (let [property-name (key current-property)
-                encoding-fn (val current-property)]
-            (when-let [value (get obj-map property-name)]
-              (when-let [encoded-value (encoding-fn value)]
-                [property-name encoded-value]))))))
+;; (defn encode-properties-values
+;;   "Given an object-map, return a map of the encoded properties. Will
+;;   ignore any property that is not defined for a given object type."
+;;   [obj-map encode-fns]
+;;   (into {}
+;;         (for [current-property encode-fns]
+;;           (let [property-name (key current-property)
+;;                 encoding-fn (val current-property)]
+;;             (when-let [value (get obj-map property-name)]
+;;               (when-let [encoded-value (encoding-fn value)]
+;;                 [property-name encoded-value]))))))
 
-
-(def test-object
-  {:object-identifier [:analog-input 1]
-   :present-value 12
-   :description "Test analog input"
-   :device-type "Test device"
-   :units :degrees-celsius
-   :reliability :no-fault-detected
-   :object-type :analog-input ;; yup, redundant information with object-identifier... 
-   :status-flags {:in-alarm true, :fault false, :out-of-service true, :overridden false}
-   :event-time-stamps ["2012-11-25T23:41:42.499Z" "2012-11-25T23:41:42.499Z" "2012-11-25T23:41:42.499Z"]})
-
-(def test-object-2
-  {:notification-class 4194303,
- :event-enable
- {:to-normal false, :to-fault false, :to-off-normal false},
- :event-time-stamps
- ["2155-07-23T23:19:17.550Z"
-  "2155-07-23T23:19:17.550Z"
-  "2155-07-23T23:19:17.550Z"],
- :present-value 0.0,
- :unknown-9997 "[44,42,b5,5,1f]",
- :unknown-9999 "[32,ff,38]",
- :object-type :analog-input,
- :unknown-9998 "[21,5a]",
- :object-name "ANALOG INPUT 1",
- :acked-transitions
- {:to-normal true, :to-fault true, :to-off-normal true},
- :notify-type 0,
- :status-flags
- {:in-alarm false,
-  :fault false,
-  :out-of-service false,
-  :overridden false},
- :time-delay 0,
- :low-limit 0.0,
- :units :percent,
- :limit-enable {:low-limit-enable false, :high-limit-enable false},
- :high-limit 0.0,
- :reliability :communication-failure,
- :event-state :normal,
- :out-of-service false,
- :object-identifier [:analog-input 1],
- :description "ANALOG INPUT 1",
- :deadband 0.0})
-
-
-(defmulti encode :object-type)
-
-(defmethod encode :default [x]
-  (throw (Exception. (str "No method implemented to convert into this object."))))
-
-(defmethod encode :analog-input [obj-map]
-  (let [encode-fns {:object-identifier c-object-identifier
-                    :object-name c-character-string
-                    :object-type c-object-type
-                    :present-value c-real
-                    :description c-character-string
-                    :device-type c-character-string
-                    :status-flags c-status-flag
-                    :event-state c-event-state
-                    :reliability c-reliability
-                    :out-of-service c-boolean
-                    :update-interval c-unsigned
-                    :units c-engineering-units
-                    :min-pres-value c-real
-                    :max-pres-value c-real
-                    :resolution c-real
-                    :cov-increment c-real
-                    :time-delay c-unsigned
-                    :notification-class c-unsigned
-                    :high-limit c-real
-                    :low-limit c-real
-                    :deadband c-real
-                    :limit-enable c-limit-enable
-                    :event-enable c-event-transition-bits
-                    :acked-transitions c-event-transition-bits
-                    :notify-type c-notify-type
-                    :event-time-stamps #(c-array c-time-stamp %)
-                    :profile-name c-character-string}]
-    (encode-properties-values obj-map encode-fns)))
-
-(defn encode-properties
-  "Encode an object map into a sequence of bacnet4j property-values.
-  Remove-keys can be used to remove read-only properties before
-  sending a command." [obj-map & remove-keys]
-  (let [encoded-values-map (-> (dissoc obj-map remove-keys) encode)]
-    (c-array #(c-property-value (make-property-identifier (key %)) (val %)) encoded-values-map)))

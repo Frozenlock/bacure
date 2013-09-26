@@ -93,10 +93,14 @@
 (defn add-object
   "Add a local object and return it. You should probably just use `add-or-update-object'."
   [object-map]
-  (let [object-id (coerce/c-object-identifier (:object-identifier object-map))]
+  (let [object-id (coerce/c-object-identifier (:object-identifier object-map))
+        bacnet-object (BACnetObject. @local-device object-id)]
+    (doseq [prop (coerce/encode-properties object-map :object-identifier :object-type)]
+      ;; print an error message letting the user know that the property might not have been implemented yet
+      (try (.setProperty bacnet-object prop) (catch Exception e (println (str (.getMessage e) "\n")))))
     (try (.addObject @local-device
-                     (BACnetObject. @local-device object-id))
-         (catch Exception e (print (str "caught exception: " (.getMessage e)))))
+                     bacnet-object)
+         (catch Exception e));; error if object already exists
     (.getObject @local-device object-id)))
   
 (defn add-or-update-object
@@ -105,7 +109,7 @@
   or :object-identifier." [object-map]
   (let [object-id (coerce/c-object-identifier (:object-identifier object-map))
         b-obj (or (.getObject @local-device object-id) (add-object object-map))]
-    (doseq [prop (coerce/encode-properties object-map :object-identifier :object-type)]
+    (doseq [prop (coerce/encode-properties object-map :object-identifier :object-type :priority-array)]
       (.setProperty b-obj prop))
     (coerce/bacnet->clojure b-obj)))
 
@@ -172,3 +176,23 @@
   "Load the local-device backup file and reset it with this new
   configuration." []
   (reset-local-device (save/get-configs)))
+
+
+
+(defn- get-java-config []
+  (.getConfiguration @local-device))
+
+(defn get-config
+  "Return a map of the local-device configurations"[]
+  (coerce/bacnet->clojure (.getConfiguration @local-device)))
+
+(defn update-config
+  "Will update the given local-device config."
+  [property-identifier value]
+  (.setProperty (get-java-config) 
+                (coerce/c-property-identifier property-identifier)
+                (coerce/encode-property :device property-identifier value)))
+
+(defn update-configs
+  "Given a map of properties, will update the local-device." [properties-smap]
+  (map #(update-config (key %) (val %)) properties-smap))

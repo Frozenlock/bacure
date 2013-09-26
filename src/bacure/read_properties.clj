@@ -246,7 +246,7 @@
 
    The :all won't be as the one defined by the BACnet standard,
    because we can't know for sure what are the properties. (Especially
-   in the case of proprietary objects." [object-property-references]
+   in the case of proprietary objects.)" [object-property-references]
    (for [single-object-property-references object-property-references]
      (let [[object-identifier & properties] single-object-property-references
            f (fn [x] (if (#{:all :required :optional} x)
@@ -263,12 +263,13 @@
      [[:device 1234] [:object-list 0]                <--- array access
      [[:analog-ouput 1] :present-value]  ...]"
   [device-id object-property-references]
-  (if (:read-property-multiple (rd/services-supported device-id))
-    (read-property-multiple device-id object-property-references)
-    (->> object-property-references
-         replace-special-identifier
-         expand-obj-prop-ref
-         (read-individually device-id))))
+       (if (:read-property-multiple (rd/services-supported device-id))
+         (read-property-multiple device-id object-property-references)
+         (map c/bacnet->clojure
+              (->> object-property-references
+                   replace-special-identifier
+                   expand-obj-prop-ref
+                   (read-individually device-id)))))
 
 (defn read-properties-multiple-objects
   "A convenience function to retrieve properties for multiple

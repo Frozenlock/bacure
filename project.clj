@@ -7,5 +7,6 @@
                  [org.clojars.frozenlock/bacnet4j "1.2.4"]
                  [clj-time "0.4.4"]]
   :plugins [[codox "0.6.4"]]
+  :jvm-opts ["-Djava.net.preferIPv4Stack=true" "-Djava.net.preferIPv6Addresses=false"]
   :codox {:src-dir-uri "https://github.com/Frozenlock/bacure/blob/master"
           :src-linenum-anchor-prefix "L"})

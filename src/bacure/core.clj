@@ -51,7 +51,7 @@
 
 (defn remote-object-properties-with-nil
   "Query a remote device and return the properties values
-   Example: (object-properties-values 1234 [:analog-input 0] :all)
+   Example: (remote-object-properties-with-nil 1234 [:analog-input 0] :all)
    -> {:notification-class 4194303, :event-enable .....}
 
    Both `object-identifiers' and `properties' accept either a single
@@ -110,7 +110,10 @@
                 (let [tested-value (get m k :not-found)]
                   (cond
                    (= tested-value :not-found) not-found-result
-                   (and (fn? v) tested-value) (v tested-value)
+                   (and (fn? v) tested-value) (try (v tested-value)
+                                                   (catch Exception e))
+                   ;; catch exception if there's an error on the provided testing function
+                   ;; (for example, if we use '>' on a string)
                    (number? tested-value) (== tested-value v)
                    (and (= (class v) java.util.regex.Pattern)
                         (string? tested-value)) (re-find v tested-value)
