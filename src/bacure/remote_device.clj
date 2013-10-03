@@ -7,6 +7,7 @@
           RemoteDevice
           service.confirmed.CreateObjectRequest
           service.confirmed.DeleteObjectRequest
+          service.confirmed.WritePropertyRequest
           service.unconfirmed.WhoIsRequest
           ))
 
@@ -91,14 +92,13 @@
   read-property-multiple. Thus, any property read based solely on this
   remote device discovery might fail. The use of `discover-network' is
   highly recommended, even if it might take a little longer to
-  execute." [&[{:keys [min-range max-range dest-port]
-      :or {dest-port (:destination-port @ld/local-device-configs)}}]]
-  (.sendBroadcast @ld/local-device
-                  dest-port (if (or min-range max-range)
-                              (WhoIsRequest.
-                               (coerce/c-unsigned (or min-range 0))
-                               (coerce/c-unsigned (or max-range 4194304)))
-                              (WhoIsRequest.))))
+  execute." [&[{:keys [min-range max-range]}]]
+  (.sendGlobalBroadcast @ld/local-device
+                        (if (or min-range max-range)
+                          (WhoIsRequest.
+                           (coerce/c-unsigned (or min-range 0))
+                           (coerce/c-unsigned (or max-range 4194304)))
+                          (WhoIsRequest.))))
 
 
 (defn- find-remote-devices-and-extended-information
@@ -125,12 +125,17 @@
      (seq (remote-devices))))
 
 (defn create-remote-object
-  "Send a 'create object request' to the remote device."
-  [device-id object-map]
-  (.send @ld/local-device (rd device-id)
-         (CreateObjectRequest. (coerce/c-object-identifier (:object-identifier object-map))
-                               (coerce/encode-properties object-map :object-type :object-identifier
-                                                         :object-list))))
+  "Send a 'create object request' to the remote device. Must be given
+  at least an :object-identifier OR an :object-type. If
+  an :object-identifier isn't given, the numbering of the new object
+  will be choosen by the remote device." [device-id object-map]
+  (let [request (CreateObjectRequest. (if-let [o-id (:object-identifier object-map)]
+                                        (coerce/c-object-identifier o-id)
+                                        (coerce/c-object-type (:object-type object-map)))
+                                      (coerce/encode-properties object-map :object-type :object-identifier
+                                                                :object-list))]
+    (-> (.send @ld/local-device (rd device-id) request)
+        coerce/bacnet->clojure)))
 
 (defn delete-remote-object
   "Send a 'delete object' request to a remote device."
@@ -138,14 +143,21 @@
   (.send @ld/local-device (rd device-id)
          (DeleteObjectRequest. (coerce/c-object-identifier object-identifier))))
 
+(defn set-remote-property
+  "Set the given remote object property."
+  [device-id object-identifier property-identifier property-value]
+  (let [obj-type (first object-identifier)
+        encoded-value (coerce/encode-property obj-type property-identifier property-value)
+        request (WritePropertyRequest. (coerce/c-object-identifier object-identifier)
+                                       (coerce/c-property-identifier property-identifier)
+                                       nil
+                                       encoded-value
+                                       nil)]
+    (.send @ld/local-device (rd device-id) request)))
 
-(defn set-remote-properties
-  "Set all the given objects properties in the remote device."
-  [device-id properties-map]
-  (let [remote-device (rd device-id)
-        encoded-properties (coerce/encode properties-map)]
-    (doseq [prop (dissoc encoded-properties :object-type :object-identifier :object-list)]
-      (.setProperty @ld/local-device remote-device
-                    (:object-identifier encoded-properties)
-                    (coerce/make-property-identifier (key prop))
-                    (val prop)))))
+
+
+;(defn set-remote-properties
+;  "Set all the given objects properties in the remote device."
+
+;; todo... must make sure to use write-property-multiple if available.

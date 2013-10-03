@@ -1,11 +1,14 @@
 (ns bacure.local-device
-  (:require [bacure.network :as network]
+  (:require [bacure.network :as net]
             [bacure.coerce :as coerce]
             [bacure.local-save :as save]))
 
 (import '(com.serotonin.bacnet4j 
           LocalDevice
-          obj.BACnetObject))
+          obj.BACnetObject
+          npdu.Network
+          npdu.ip.IpNetwork
+          transport.Transport))
 
 
 (defmacro mapify
@@ -21,11 +24,63 @@
                         (for [item symbols]
                           [(keyword item) item])))))
 
+
 ;; ================
 
 
 (def local-device (atom nil))
 (def local-device-configs (atom {}))
+
+;;;;;;
+
+
+;; create new network (IP)
+(def net (com.serotonin.bacnet4j.npdu.ip.IpNetwork. ))
+
+(defn ip-network
+  "Create a new ip network for a local-device."
+  ([] (com.serotonin.bacnet4j.npdu.ip.IpNetwork.))
+  ([broadcast-address]
+     (com.serotonin.bacnet4j.npdu.ip.IpNetwork. broadcast-address))
+  ([broadcast-address port]
+     (com.serotonin.bacnet4j.npdu.ip.IpNetwork. broadcast-address port))
+  ([broadcast-address port local-address]
+     (com.serotonin.bacnet4j.npdu.ip.IpNetwork. broadcast-address port local-address))
+  ([broadcast-address port local-address network-number]
+     (com.serotonin.bacnet4j.npdu.ip.IpNetwork. broadcast-address port local-address network-number)))
+          
+(defn transport [network]
+  (Transport. network))
+
+
+(defn- get-java-config []
+  (.getConfiguration @local-device))
+
+(defn get-configs
+  "Return a map of the local-device configurations"[]
+  (coerce/bacnet->clojure (.getConfiguration @local-device)))
+
+(defn- update-config
+  "Will update the given local-device config."
+  [property-identifier value]
+  (.setProperty (get-java-config) 
+                (coerce/c-property-identifier property-identifier)
+                (coerce/encode-property :device property-identifier value)))
+
+(defn update-configs
+  "Given a map of properties, will update the local-device. Return the
+  device configs." [properties-smap]
+  (doall (map #(update-config (key %) (val %)) properties-smap))
+  (get-configs))
+
+
+(def defaults-config
+  "Some default configurations for device creation."
+  {:model-name "Bacure"
+   :vendor-identifier 999
+   :description "BACnet device running on the open source Bacure stack. See www.bacnethelp.com for details."
+   :vendor-name "BACnetHelp.com"})
+
 
 (defn new-local-device
   "Return a new configured BACnet local device . (A device is required
@@ -37,9 +92,9 @@
    :device-id <number>
    :broadcast-address <string>
    :port <number>
-   :destination-port <number>
    :local-address <string> <----- You probably don't want to use it.
    :timeout <number>
+   :'other-configs' <string> OR <number> OR other
 
    The device ID is the device identifier on the network. It should be
    unique.
@@ -48,6 +103,12 @@
 
    The broadcast-address is the address on which we send 'WhoIs'.
 
+   The 'other-configs' is any configuration returned when using the
+   function 'get-configs'. These configuation can be set when the
+   device is created simply by providing them in the arguments. For
+   example, to change the vendor name, simply add ':vendor-name \"some
+   vendor name\"'.
+
    The local-address will default to \"0.0.0.0\", also known as the
    'anylocal'. (Default by the underlying BACnet4J library.) This is
    required on Linux and Solaris machines in order to catch packet
@@ -55,21 +116,26 @@
    know exactly what you are doing, bad things will happen."
   ([] (new-local-device nil))
   ([configs-map]
-     (let [{:keys [device-id broadcast-address port destination-port local-address timeout]
+     (let [{:keys [device-id broadcast-address port local-address timeout]
             :or {device-id 1338 ;;some default configs
-                 broadcast-address (network/get-broadcast-address (network/get-any-ip))
-                 port 47808
-                 destination-port 47808
-                 timeout 1000}}
-           configs-map
-           ld (LocalDevice. device-id broadcast-address local-address)]
-       (.setPort ld port)
-       (.setTimeout ld timeout) ;; increase the default to 20s
-       (reset! local-device ld)
-       (reset! local-device-configs (mapify device-id broadcast-address port
-                                            destination-port local-address timeout))
-       ld)))
+                 port com.serotonin.bacnet4j.npdu.ip.IpNetwork/DEFAULT_PORT
+                 timeout 1000}} configs-map]
+       (let [broadcast-address (or broadcast-address
+                                   (net/get-broadcast-address (or local-address (net/get-any-ip))))
+             local-address (or local-address com.serotonin.bacnet4j.npdu.ip.IpNetwork/DEFAULT_BIND_IP)
+             other-configs (dissoc configs-map :device-id :broadcast-address :port :local-address :timeout)  
+             tp (->> (ip-network broadcast-address
+                                 port
+                                 local-address)
+                     (transport))
+             ld (LocalDevice. device-id tp)]
+         (.setTimeout tp timeout) ;; increase the default to 20s
+         (reset! local-device ld)
+         (update-configs (merge defaults-config other-configs))
+         (reset! local-device-configs (assoc @local-device-configs :provided-configs configs-map))
+         ld))))
 
+;;;;;;
 
 
 (defn initialize
@@ -126,15 +192,18 @@
     (remove-object o)))
 
 (defn local-device-backup
-  "Spit all important information about the local device into a map." []
-  (merge @local-device-configs
-         (when @local-device
-           {:objects (local-objects)
-            :port (.getPort @local-device)
-            :retries (.getRetries @local-device)
-            :seg-timeout (.getSegTimeout @local-device)
-            :seg-window (.getSegWindow @local-device)
-            :timeout (.getTimeout @local-device)})))
+  "Spit all important information about the local device into a map.
+   :configs are all the configs returned by 'get-configs'
+   :objects is the list of local objects (and their properties)
+   :provided-configs are the configuration given when the device was
+   created using `new-local-device'." []
+   (merge @local-device-configs
+          (when @local-device
+            {:objects (local-objects)
+             :configs (dissoc (get-configs) :object-identifier :object-list)})))
+
+
+
 ;; eventually we should be able to add programs in the local device
 
 (defn reset-local-device
@@ -147,17 +216,13 @@
   ---> reset the device and change the device id."
   ([] (reset-local-device nil))
   ([new-config]
-     (terminate)
-     (new-local-device (merge (local-device-backup) new-config))
-     (let [configs (local-device-backup)]
-       (doto @local-device
-         (.setRetries (:retries configs))
-         (.setSegTimeout (:seg-timeout configs))
-         (.setSegWindow (:seg-window configs))
-         (.setTimeout (:timeout configs)))
+     (let [backup (local-device-backup)]
+       (terminate)
+       (new-local-device (merge (:provided-config backup) new-config))
        (initialize)
-       (doseq [o (or (:objects configs) [])]
-         (add-or-update-object o)))))
+       (doseq [o (or (:objects backup) [])]
+         (add-or-update-object o))
+       (update-configs (:configs backup)))))
 
 (defn clear-all!
   "Mostly a development function; Destroy all traces of a local-device."[]
@@ -176,23 +241,3 @@
   "Load the local-device backup file and reset it with this new
   configuration." []
   (reset-local-device (save/get-configs)))
-
-
-
-(defn- get-java-config []
-  (.getConfiguration @local-device))
-
-(defn get-config
-  "Return a map of the local-device configurations"[]
-  (coerce/bacnet->clojure (.getConfiguration @local-device)))
-
-(defn update-config
-  "Will update the given local-device config."
-  [property-identifier value]
-  (.setProperty (get-java-config) 
-                (coerce/c-property-identifier property-identifier)
-                (coerce/encode-property :device property-identifier value)))
-
-(defn update-configs
-  "Given a map of properties, will update the local-device." [properties-smap]
-  (map #(update-config (key %) (val %)) properties-smap))

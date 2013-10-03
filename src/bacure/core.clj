@@ -31,9 +31,9 @@
   chances of finding them, we reset the local device with a new port
   each time." [&{:keys [delay port-min port-max] :or
                  {delay 500 port-min 47801 port-max 47820}}]
-  (let [configs (ld/local-device-backup)
+  (let [configs (:provided-configs (ld/local-device-backup))
         results (->> (for [port (range port-min port-max)]
-                       (do (ld/reset-local-device {:port port :destination-port port})
+                       (do (ld/reset-local-device {:port port})
                            (rd/find-remote-devices)
                            (Thread/sleep delay)
                            (when-let [devices (seq (rd/remote-devices))]

@@ -128,9 +128,6 @@
          ;; somehow there's some properties missing...
          {:backup-and-restore-state 338}))
 
-(defn make-property-identifier [prop-keyword]
-  (PropertyIdentifier. (get prop-int-map prop-keyword)))
-
 (def obj-int-map
   (subclass-to-map ObjectType))
 
@@ -504,6 +501,12 @@
            value)
          bacnet->clojure)))
 
+(defmethod bacnet->clojure com.serotonin.bacnet4j.service.acknowledgement.CreateObjectAck
+  [^CreateObjectAck o]
+  {:choice-Id (.getChoiceId o)
+   :object-identifier (bacnet->clojure (.getObjectIdentifier o))})
+
+
 ;; methods for type 'constructed'
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.AccumulatorRecord
@@ -642,7 +645,7 @@
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ShedLevel
   [^ShedLevel o]
-  (bacnet->clojure (.getAmount o)))
+  (bacnet->clojure (.getLevel o)))
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.StatusFlags
   [^StatusFlags o]
@@ -841,6 +844,10 @@
 ;; We use the value type already associated to each property/object combo in the underlying Java library.
 ;; At this point building our own lookup table would be trivial, but there's no point in duplicating the work.
 
+(defn get-object-type 
+  "Find the object type in an object-map (either from
+  the :object-type, or in the :object-identifier)."[obj-map]
+  (or (:object-type obj-map) (first (:object-identifier obj-map))))
 
 (defn encode-property 
   "Encode the property value depending on what type it should be given the object."
@@ -857,39 +864,23 @@
 
 
 
-(defn encode-properties-values [obj-map]
-  (let [o-t (:object-type obj-map)]
+(defn encode-properties-values
+  "Take an object-map (a map of properties) and encode the properties
+  into their native java object. For example, a clojure number \"1\"
+  might be encoded into a real, or into an unisgned integer, depending
+  on the object." [obj-map]
+  (let [o-t (get-object-type obj-map)]
     (into {}
           (for [[property value] obj-map]
             (try 
               [property (encode-property o-t property value)]
-              (catch Exception e (println (str "*** " property " ***"))))))))
+              (catch Exception e (println (str "Could not encode *** " property 
+                                               " ***. Might not be implemented yet."))))))))
        
 (defn encode-properties
   "Encode an object map into a sequence of bacnet4j property-values.
   Remove-keys can be used to remove read-only properties before
   sending a command." [obj-map & remove-keys]
   (let [encoded-values-map (apply dissoc (cons (encode-properties-values obj-map) remove-keys))]
-    (c-array #(c-property-value (make-property-identifier (key %)) (val %)) encoded-values-map)))
-
-
-
-;; here we associate, for every object, what datatype-fn should be
-;; used to encode the data, with the property.
-
-;; *** Some interesting properties found in com.serotonin.bacnet4j.obj.ObjectProperties
-;; Perhaps I won't have to make my own datatype/object-properties table!
-
-
-;; (defn encode-properties-values
-;;   "Given an object-map, return a map of the encoded properties. Will
-;;   ignore any property that is not defined for a given object type."
-;;   [obj-map encode-fns]
-;;   (into {}
-;;         (for [current-property encode-fns]
-;;           (let [property-name (key current-property)
-;;                 encoding-fn (val current-property)]
-;;             (when-let [value (get obj-map property-name)]
-;;               (when-let [encoded-value (encoding-fn value)]
-;;                 [property-name encoded-value]))))))
+    (c-array #(c-property-value (c-property-identifier (key %)) (val %)) encoded-values-map)))
 
