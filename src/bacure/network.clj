@@ -1,5 +1,4 @@
-(ns bacure.network
-  (:use [clojure.string :only (split join)]))
+(ns bacure.network)
 
 (import 'java.net.InetSocketAddress)
 (import java.net.InetAddress java.net.Inet4Address)
@@ -20,6 +19,12 @@
        (map #(.getHostAddress %))
        (remove nil?)))
 
+(defn get-broadcast-address-of-interface [interface]
+  (->> (map #(.getBroadcast %) (.getInterfaceAddresses interface))
+       (remove nil?)
+       (map #(.getHostAddress %))
+       first))
+
 
 (defn interfaces-and-ips
   "Return a list of interfaces and their IPs.
@@ -27,18 +32,12 @@
   (let [interfaces (get-interfaces)]
     (->> (for [i interfaces]
            (when-let [ips (seq (ipv4-from-interface i))]
-             {:interface (.getName i) :ips ips}))
+             {:interface (.getName i) :ips ips :broadcast-address (get-broadcast-address-of-interface i)}))
          (remove nil?))))
         
 (defn get-any-ip
   "Return the first IPv4 found." []
   (-> (interfaces-and-ips) first :ips first))
-
-(defn get-broadcast-address-of-interface [interface]
-  (->> (map #(.getBroadcast %) (.getInterfaceAddresses interface))
-       (remove nil?)
-       (map #(.getHostAddress %))
-       first))
 
 (defn get-interface-from-ip 
   "Given an IP address, return the interface."

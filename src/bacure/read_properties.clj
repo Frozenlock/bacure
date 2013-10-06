@@ -2,7 +2,6 @@
   (:refer-clojure :exclude [send])
   (:require [bacure.coerce :as c]
             [bacure.local-device :as ld]
-            [bacure.remote-device :as rd]
             [clojure.walk :as walk]))
 
 (import (com.serotonin.bacnet4j 
@@ -22,7 +21,9 @@
 (defn send-request
   "Send the request to the remote device"
   [device-id request]
-  (.send @ld/local-device (rd/rd device-id) request))
+  (.send @ld/local-device 
+         (.getRemoteDevice @ld/local-device device-id)
+         request))
 
 
 ;; ================================================================
@@ -112,9 +113,8 @@
 ;; ================================================================
 
 (defn find-max-refs [device-id]
-  (if (some #{(rd/segmentation-supported device-id)} [:both :transmit])
-    (.getMaxReadMultipleReferencesSegmented @ld/local-device)
-    (.getMaxReadMultipleReferencesNonsegmented @ld/local-device)))
+  (let [remote-device (.getRemoteDevice @ld/local-device device-id)]
+    (.getMaxReadMultipleReferences remote-device)))
 
 
 (defn partition-object-property-references
@@ -170,6 +170,7 @@
        (group-by :object-identifier)
        vals
        (map (partial apply merge))))
+
 
 
 
@@ -263,7 +264,9 @@
      [[:device 1234] [:object-list 0]                <--- array access
      [[:analog-ouput 1] :present-value]  ...]"
   [device-id object-property-references]
-       (if (:read-property-multiple (rd/services-supported device-id))
+       (if (-> (.getServicesSupported (.getRemoteDevice @ld/local-device device-id))
+               c/bacnet->clojure
+               :read-property-multiple)
          (read-property-multiple device-id object-property-references)
          (map c/bacnet->clojure
               (->> object-property-references
@@ -277,3 +280,46 @@
   (->> (for [oid object-identifiers] (cons oid properties))
        vector
        (apply (partial read-properties device-id))))
+
+
+;; ================================================================
+;; =====================  Read range requests  ====================
+;; ================================================================
+
+;; I wonder if there's a way to do this only using the read-properties functions...
+;; For now we rely on the underlying bacnet4j library.
+
+(import (com.serotonin.bacnet4j.service.confirmed
+         ReadRangeRequest
+         ReadRangeRequest$ByPosition
+         ReadRangeRequest$BySequenceNumber
+         ReadRangeRequest$ByTime))
+
+
+(defn read-range-request-by [reference range & by-what]
+  (condp = (first by-what)
+    :sequence (ReadRangeRequest$BySequenceNumber. (c/c-unsigned reference) (c/c-signed range))
+    :time (ReadRangeRequest$ByTime. (c/c-date-time (str reference)) (c/c-signed range))
+    (ReadRangeRequest$ByPosition. (c/c-unsigned reference) (c/c-signed range)))) ;;default to :position
+
+
+(defn read-range-request
+  "'by-what?' can be :sequence, :time, or position (the default if
+  none is provided)."
+  [object-identifier property-identifier array-index [reference range] & by-what?]
+  (ReadRangeRequest.
+   (c/c-object-identifier object-identifier)
+   (c/c-property-identifier property-identifier)
+   (c/c-unsigned array-index)
+   (read-range-request-by reference range (first by-what?))))
+
+(defn read-range 
+  "'by-what?' can be :sequence, :time, or position (the default if
+  none is provided)."
+  [device-id object-identifier property-identifier array-index [reference range] & by-what?]
+  (->> (read-range-request object-identifier property-identifier array-index [reference range] by-what?)
+       (send-request device-id)
+       c/bacnet->clojure))
+
+
+   

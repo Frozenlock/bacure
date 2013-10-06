@@ -1,6 +1,7 @@
 (ns bacure.remote-device
-  (:require [bacure.coerce :as coerce]
-            [bacure.local-device :as ld]))
+  (:require [bacure.coerce :as coerce]           
+            [bacure.local-device :as ld]
+            [bacure.read-properties :as rp]))
 
 
 (import '(com.serotonin.bacnet4j 
@@ -22,8 +23,6 @@
   [device-id]
   (-> (.getServicesSupported (rd device-id))
       coerce/bacnet->clojure))
-;; contrary to the bacnet4j library, we won't throw an error when
-;; dealing with devices not yet supporting the post 1995 services.
 
 (defn segmentation-supported
   "Return the type of segmentatin supported."
@@ -35,27 +34,27 @@
   "True if we already have the device extended information, nil
   otherwise." [device-id]
   (when-let [device (rd device-id)]
-    (.getName device)))
+    (.getServicesSupported device)))
 
 (defn extended-information
+  [device-id]
   "Get the remote device extended information (name, segmentation,
   property multiple, etc..) if we haven't already."
-  [device-id]
-  (let [device (rd device-id)]
+  (let [dev (rd device-id)]
     (when-not (extended-information? device-id)
-      (try (-> @ld/local-device
-               (.getExtendedDeviceInformation device))
-           (catch Exception e
-             ; if there's an error while getting the extended device
-             ; information, just assume that there is almost no
-             ; services supported. (Patch necessary until this
-             ; function is implemented in clojure)
-             (.setSegmentationSupported device (coerce/c-segmentation :unknown))
-             (.setServicesSupported device (coerce/c-services-supported {:read-property true}))))
-      ;; and now update the services supported to be compatible with pre 1995 BACnet
-      (->> (services-supported device-id)
-           coerce/c-services-supported
-           (.setServicesSupported device)))))
+      ;; first step is to see if the device support read-property-multiple to enable faster read
+      (let [services 
+            (-> (rp/read-properties device-id [ [[:device device-id] :protocol-services-supported]])
+                first :protocol-services-supported)]
+        (.setServicesSupported dev (coerce/c-services-supported services)))
+      ;; then we can query for more info
+      (let [result (first (rp/read-properties device-id 
+                                              [ [[:device device-id] :object-name 
+                                                 :protocol-version :protocol-revision]]))]
+        (.setName dev (:object-name result))
+        (.setProtocolVersion dev (coerce/c-unsigned (:protocol-version result)))
+        (.setProtocolRevision dev (coerce/c-unsigned (:protocol-revision result)))
+        result))))
 
 (defn remote-devices
   "Return the list of the current remote devices. These devices must

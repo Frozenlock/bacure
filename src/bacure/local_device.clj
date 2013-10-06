@@ -28,8 +28,8 @@
 ;; ================
 
 
-(def local-device (atom nil))
-(def local-device-configs (atom {}))
+(defonce local-device (atom nil))
+(defonce local-device-configs (atom {}))
 
 ;;;;;;
 
@@ -69,14 +69,22 @@
 
 (defn update-configs
   "Given a map of properties, will update the local-device. Return the
-  device configs." [properties-smap]
-  (doall (map #(update-config (key %) (val %)) properties-smap))
-  (get-configs))
+  device configs. Please note that many properties CANNOT be changed
+  while the device is initialized (:object-identifier for example) and
+  will simply be discarded." [properties-smap]
+  (let [valid-properties (keys (dissoc (get-configs) :object-list)) ;; what are the keys we should expect
+        filtered-properties (select-keys properties-smap valid-properties)]
+    ;; filter out any properties we are not expecting. This allows the
+    ;; user to give a map containing other values.
+  (doall (map #(update-config (key %) (val %)) filtered-properties))
+  (get-configs)))
 
 
-(def defaults-config
+(def default-configs
   "Some default configurations for device creation."
-  {:model-name "Bacure"
+  {:device-id 1338
+   :port 47808
+   :model-name "Bacure"
    :vendor-identifier 999
    :description "BACnet device running on the open source Bacure stack. See www.bacnethelp.com for details."
    :vendor-name "BACnetHelp.com"})
@@ -93,57 +101,61 @@
    :broadcast-address <string>
    :port <number>
    :local-address <string> <----- You probably don't want to use it.
-   :timeout <number>
    :'other-configs' <string> OR <number> OR other
 
    The device ID is the device identifier on the network. It should be
    unique.
 
+   The broadcast-address is the address on which we send 'WhoIs'. You
+   should not have to provide anything for this, unless you have
+   multiple interfaces or want to trick your machine into sending to a
+   'fake' broadcast address.
+
    Port and destination port are the BACnet port, usually 47808.
-
-   The broadcast-address is the address on which we send 'WhoIs'.
-
-   The 'other-configs' is any configuration returned when using the
-   function 'get-configs'. These configuation can be set when the
-   device is created simply by providing them in the arguments. For
-   example, to change the vendor name, simply add ':vendor-name \"some
-   vendor name\"'.
 
    The local-address will default to \"0.0.0.0\", also known as the
    'anylocal'. (Default by the underlying BACnet4J library.) This is
    required on Linux and Solaris machines in order to catch packet
    sent as a broadcast. You can manually change it, but unless you
-   know exactly what you are doing, bad things will happen."
+   know exactly what you are doing, bad things will happen.
+
+   The 'other-configs' is any configuration returned when using the
+   function 'get-configs'. These configuation can be set when the
+   device is created simply by providing them in the arguments. For
+   example, to change the vendor name, simply add ':vendor-name \"some
+   vendor name\"'."
   ([] (new-local-device nil))
   ([configs-map]
-     (let [{:keys [device-id broadcast-address port local-address timeout]
-            :or {device-id 1338 ;;some default configs
-                 port com.serotonin.bacnet4j.npdu.ip.IpNetwork/DEFAULT_PORT
-                 timeout 1000}} configs-map]
-       (let [broadcast-address (or broadcast-address
-                                   (net/get-broadcast-address (or local-address (net/get-any-ip))))
-             local-address (or local-address com.serotonin.bacnet4j.npdu.ip.IpNetwork/DEFAULT_BIND_IP)
-             other-configs (dissoc configs-map :device-id :broadcast-address :port :local-address :timeout)  
-             tp (->> (ip-network broadcast-address
-                                 port
-                                 local-address)
-                     (transport))
-             ld (LocalDevice. device-id tp)]
-         (.setTimeout tp timeout) ;; increase the default to 20s
-         (reset! local-device ld)
-         (update-configs (merge defaults-config other-configs))
-         (reset! local-device-configs (assoc @local-device-configs :provided-configs configs-map))
-         ld))))
+     (let [configs (merge default-configs configs-map)
+           device-id (or (:device-id configs) (last (:object-identifier configs)) (:device-id default-configs))
+           broadcast-address (or (:broadcast-address configs)
+                                 (net/get-broadcast-address (or (:local-address configs) (net/get-any-ip))))
+           local-address (or (:local-address configs) com.serotonin.bacnet4j.npdu.ip.IpNetwork/DEFAULT_BIND_IP)
+           port (or (:port configs) com.serotonin.bacnet4j.npdu.ip.IpNetwork/DEFAULT_PORT)
+           tp (->> (ip-network broadcast-address port local-address)
+                   (transport))
+           ld (LocalDevice. device-id tp)]
+       (reset! local-device ld)
+       (update-configs configs)
+       (reset! local-device-configs configs)
+       ld)))
 
 ;;;;;;
 
 
 (defn initialize
   "Initialize the local device. This will bind it to it's port (most
-  likely 47808). The port will remain unavailable until the device is
-  terminated. Once terminated, you should discard the device and
-  create a new one if needed."[]
-  (.initialize @local-device))
+  likely 47808) and load any programs available for the local-device.
+  The port will remain unavailable until the device is terminated.
+  Once terminated, you should discard the device and create a new one
+  if needed.
+
+  For more information on the local-device 'programs' operations, see
+  the bacure.local-save namespace."[]
+  (.initialize @local-device)
+  (try (save/load-program)  ;; Anything in the program will be executed.
+       (catch Exception e (println (str "Uh oh... couldn't load the local device program:\n"
+                                        (.getMessage e))))))
 
 (defn terminate
   "Terminate the local device, freeing any bound port in the process."[]
@@ -199,8 +211,8 @@
    created using `new-local-device'." []
    (merge @local-device-configs
           (when @local-device
-            {:objects (local-objects)
-             :configs (dissoc (get-configs) :object-identifier :object-list)})))
+            (merge {:objects (local-objects)}
+                   (get-configs)))))
 
 
 
@@ -218,11 +230,11 @@
   ([new-config]
      (let [backup (local-device-backup)]
        (terminate)
-       (new-local-device (merge (:provided-config backup) new-config))
-       (initialize)
-       (doseq [o (or (:objects backup) [])]
-         (add-or-update-object o))
-       (update-configs (:configs backup)))))
+       (let [ld (new-local-device (merge backup new-config))]
+         (initialize)
+         (doseq [o (or (:objects backup) [])]
+           (add-or-update-object o))
+         ld))))
 
 (defn clear-all!
   "Mostly a development function; Destroy all traces of a local-device."[]
@@ -239,5 +251,5 @@
 
 (defn load-local-device-backup
   "Load the local-device backup file and reset it with this new
-  configuration." []
-  (reset-local-device (save/get-configs)))
+  configuration." [& new-configs]
+  (reset-local-device (merge (save/get-configs) (first new-configs))))

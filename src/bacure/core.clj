@@ -7,8 +7,8 @@
    
 (defn boot-up
   "Create a local-device, load its config file, initialize it, and
-  find the remote devices." []
-  (ld/load-local-device-backup)
+  find the remote devices." [& configs]
+  (ld/load-local-device-backup (first configs))
   (future (rd/discover-network)) true)
 
 
@@ -83,6 +83,21 @@
   [device-id]
   (-> (remote-object-properties device-id [:device device-id] :object-list)
       ((comp :object-list first))))
+
+(defn read-trend-log
+  "A convenience function to retrieve all data from a trend-log (even the log-buffer).
+
+  Example:  (read-trend-log 4589 [:trend-log 1])
+  -> {:object-name \"Trend Log 1\",
+      :start-time \"2009-01-01T05:00:00.000Z\",
+      :log-buffer
+      [[\"2009-03-01T07:15:00.000Z\" 1009.0]
+       [\"2009-03-01T07:30:00.000Z\" 1010.0]...]...}"
+  [device-id object-identifier]
+  (let [properties (first (remote-object-properties device-id object-identifier :all))
+        record-count (:record-count properties)]
+    (merge (rp/read-range device-id object-identifier :log-buffer nil [1 record-count])
+           properties)))
 
 (defn remote-objects-all-properties
   "Return a list of maps of every objects and their properties."

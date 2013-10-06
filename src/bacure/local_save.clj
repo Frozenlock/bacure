@@ -45,7 +45,11 @@
 (defn load-program
   "Load a given program file. Default to 'main' if no name is given."
   ([] (load-program "main"))
-  ([name] (load-file (make-program-path name))))
+  ([name] 
+     (let [pp (make-program-path name)]
+       (if (.exists (io/file pp))
+         (load-file pp)
+         (str "No file found for " pp)))))
 
 (defn save-and-load
   "Save and load a program string. Default to 'main' if no name is given."

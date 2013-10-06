@@ -19,6 +19,9 @@
             service.confirmed.ReinitializeDeviceRequest
             service.confirmed.AtomicReadFileRequest
             service.confirmed.ReadRangeRequest
+            service.confirmed.ReadRangeRequest$ByPosition
+            service.confirmed.ReadRangeRequest$BySequenceNumber
+            service.confirmed.ReadRangeRequest$ByTime
             service.unconfirmed.WhoIsRequest
             type.AmbiguousValue
             type.constructed.AccumulatorRecord
@@ -27,6 +30,7 @@
             type.constructed.ActionList
             type.constructed.Address
             type.constructed.BACnetError
+            type.constructed.Choice
             type.constructed.CovSubscription
             type.constructed.Destination
             type.constructed.DeviceObjectPropertyReference
@@ -36,6 +40,7 @@
             type.constructed.PropertyReference
             type.constructed.PropertyValue            
             type.constructed.LimitEnable
+            type.constructed.LogRecord
             type.constructed.ReadAccessSpecification
             type.constructed.Recipient
             type.constructed.SequenceOf
@@ -47,6 +52,7 @@
             type.constructed.TimeStamp
             type.constructed.ReadAccessSpecification
             type.constructed.ReadAccessResult
+            type.constructed.ReadAccessResult$Result
             type.constructed.StatusFlags
             type.constructed.ServicesSupported
             type.constructed.ShedLevel
@@ -87,7 +93,12 @@
 
 
 (def ^:dynamic *drop-ambiguous*
-  "Ambiguous values will be dropped unless this is bound to false." true)
+  "Ambiguous values will be dropped unless this is bound to false." false)
+
+(def ^:dynamic *verbose*
+  "Print some message when errors or special cases happen, but are
+  discarded. Mostly for development purposes." false)
+
 
 
 ;; functions to convert between camel-case and a more clojure-like style
@@ -115,13 +126,15 @@
 (defn subclass-to-map
   "Make a map of the subclasses and associate them with their integer
   value."[class]
-  (let [qty (dec (count (.getDeclaredFields class)))]
-    (into {}
-          (for [i (range qty)
-                :let [object (construct class i)]]
-            (when-not (= name "serialVersionUID")
-              [(string-name-to-keyword object) i])))))
-
+  (let [fields (.getDeclaredFields class)]
+    (->> (for [f fields]
+           (try [(-> (.getName f)
+                     from-camel
+                     string-name-to-keyword)
+                 (.intValue (.get f nil))]
+                (catch Exception e)))
+         (remove nil?)
+         (into {}))))
 
 (def prop-int-map
   (merge (subclass-to-map PropertyIdentifier)
@@ -240,7 +253,23 @@
           (for [item m]
             [(keyword (from-camel (name (key item))))
              (val item)]))))
+
+
+;; (defn ambiguous [byte-seq]
+;;   (proxy [com.serotonin.bacnet4j.type.Encodable] [byte-seq]
+;;     (toString [] (str byte-seq))))
+
+
+;;   (let [ byte-state (ref byte-seq)]
+;;     (proxy [ java.io.InputStream] []
+;;       (read [] 
+;;         (dosync
+;;           ;; peel off one byte to return and save the rest
+;;           (let [[ b & more-bytes] @byte-state]
+;;             (ref-set byte-state more-bytes)
+;;             (if b b -1)))))))
    
+;; (defn ambiguous
 
 ;;================================================================
 ;; Coerce to various datatypes functions
@@ -479,6 +508,9 @@
     (c-array c-property-reference property-references)))
 
 
+    
+
+
 ;;================================================================
 ;; Convert to Clojure objects
 ;;================================================================  
@@ -505,6 +537,14 @@
   [^CreateObjectAck o]
   {:choice-Id (.getChoiceId o)
    :object-identifier (bacnet->clojure (.getObjectIdentifier o))})
+
+(defmethod bacnet->clojure com.serotonin.bacnet4j.service.acknowledgement.ReadRangeAck
+  [^ReadRangeAck o]
+  {:object-identifier (bacnet->clojure (.getObjectIdentifier o))
+   (bacnet->clojure (.getPropertyIdentifier o)) (bacnet->clojure (.getItemData o))}
+  ;;should we add the resultflags?
+  )
+
 
 
 ;; methods for type 'constructed'
@@ -549,6 +589,10 @@
   [^BACnetError o]
   (throw (Exception. (.toString o))));;throw an error
 
+(defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.Choice
+  [^Choice o]
+  (bacnet->clojure (.getDatum o)))
+
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.DateTime
   [^DateTime o]
   (clj-time.format/unparse
@@ -578,6 +622,13 @@
   [^LimitEnable o]
   {:low-limit-enable (.isLowLimitEnable o)
      :high-limit-enable (.isHighLimitEnable o)})
+
+
+(defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.LogRecord
+  [^LogRecord o]
+  [(bacnet->clojure (.getTimestamp o))
+   (bacnet->clojure (.getEncodable o))])
+
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ObjectTypesSupported
   [^ObjectTypesSupported o]
@@ -616,18 +667,47 @@
   [(bacnet->clojure (.getObjectIdentifier o))
    (bacnet->clojure (.getListOfPropertyReferences o))])
 
+(defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ReadAccessResult$Result
+  [^ReadAccessResult$Result o]
+  (let [prop-ref (-> (map bacnet->clojure [(.getPropertyIdentifier o)
+                                           (.getPropertyArrayIndex o)])
+                     c-property-reference
+                     bacnet->clojure)]
+    (try {prop-ref
+          (bacnet->clojure (.getReadResult o))}
+         (catch Exception e (when *verbose*
+                              (print (str (.getMessage e) " --- " prop-ref )))))))
+
+;; (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ReadAccessResult
+;;   [^ReadAccessResult o]
+;;   (let [oid (.getObjectIdentifier o)]
+;;     (for [result (.getValues (.getListOfResults o))]
+;;       (let [value (try (bacnet->clojure (.getDatum (.getReadResult result)))
+;;                        (catch Exception e))
+;;             property-reference
+;;             (c-property-reference (map bacnet->clojure [(.getPropertyIdentifier result)
+;;                                                         (.getPropertyArrayIndex result)]))]
+;;         (into {}
+;;               [[:object-identifier (bacnet->clojure oid)]
+;;                [(bacnet->clojure property-reference) value]])))))
+
+
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ReadAccessResult
   [^ReadAccessResult o]
   (let [oid (.getObjectIdentifier o)]
-    (for [result (.getValues (.getListOfResults o))]
-      (let [value (try (bacnet->clojure (.getDatum (.getReadResult result)))
-                       (catch Exception e))
-            property-reference
-            (c-property-reference (map bacnet->clojure [(.getPropertyIdentifier result)
-                                                        (.getPropertyArrayIndex result)]))]
-        (into {}
-              [[:object-identifier (bacnet->clojure oid)]
-               [(bacnet->clojure property-reference) value]])))))
+    (->> (for [result (.getListOfResults o)]
+           {[:object-identifier (bacnet->clojure oid)]
+            (bacnet->clojure o)})
+         (filter #(nil? (val %)) ))))
+
+(defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ReadAccessResult
+  [^ReadAccessResult o]
+  (let [oid (.getObjectIdentifier o)]
+    (for [result (bacnet->clojure (.getListOfResults o))]
+      (into {}
+            [[:object-identifier (bacnet->clojure oid)]
+             result]))))
+
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.SequenceOf
   [^SequenceOf o]
@@ -774,8 +854,9 @@
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.AmbiguousValue
   [^AmbiguousValue o]
-  (if-not *drop-ambiguous* (.hashCode o)
-            nil)) ;; drop it! Ambiguous value was causing a lot of issues with
+  (if-not *drop-ambiguous* o
+          (do (when *verbose* (print "Ambiguous value dropped. See bacure.coerce for details."))
+              nil))) ;; drop it! Ambiguous value was causing a lot of issues with
                   ;; higher order functions, especially in case of comparison.
 
 ;; methods for 'obj'
@@ -799,10 +880,10 @@
 
 (defmethod bacnet->clojure nil [_] nil)
 
+
 (defmethod bacnet->clojure clojure.lang.PersistentVector
   [^clojure.lang.PersistentVector o]
-  o)
-  
+  (into [] (map bacnet->clojure o)))  
 
 ;; methods for java
 
