@@ -85,7 +85,7 @@
   {:device-id 1338
    :port 47808
    :model-name "Bacure"
-   :vendor-identifier 999
+   :vendor-identifier 697
    :description "BACnet device running on the open source Bacure stack. See www.bacnethelp.com for details."
    :vendor-name "BACnetHelp.com"})
 
