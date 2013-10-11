@@ -101,7 +101,7 @@
                            (catch ErrorAPDUException e
                              (when-not *nil-on-APDU-exception*
                                (throw e))))]
-           (into {} [[prop-ref result]
+           (into {} [[prop-ref (c/bacnet->clojure result)]
                      [:object-identifier oid]])))
        (group-by :object-identifier)
        vals
@@ -268,11 +268,10 @@
                c/bacnet->clojure
                :read-property-multiple)
          (read-property-multiple device-id object-property-references)
-         (map c/bacnet->clojure
               (->> object-property-references
                    replace-special-identifier
                    expand-obj-prop-ref
-                   (read-individually device-id)))))
+                   (read-individually device-id))))
 
 (defn read-properties-multiple-objects
   "A convenience function to retrieve properties for multiple
