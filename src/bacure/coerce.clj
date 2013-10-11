@@ -520,7 +520,7 @@
 (defmulti bacnet->clojure class)
 
 (defmethod bacnet->clojure :default [x]
-  (str "No method YET for " (.toString x)))
+  (print "No method YET to coerce " (.toString x)" into a clojure structure."))
 
 ;; methods for type 'acknowledgement'
 
@@ -632,7 +632,12 @@
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ObjectTypesSupported
   [^ObjectTypesSupported o]
-  (bean-map o))
+  (try ;; we only 'try' it, because I've found devices triggering a
+       ;; ArrayIndexOutOfBoundsException for the bacnet4j library. It
+       ;; might be possible to use .getValue to get the list of
+       ;; booleans and reconstruct the object.
+    (bean-map o)
+    (catch Exception e)))
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ObjectPropertyReference
   [^ObjectPropertyReference o]
@@ -883,7 +888,7 @@
 
 (defmethod bacnet->clojure clojure.lang.PersistentVector
   [^clojure.lang.PersistentVector o]
-  (into [] (map bacnet->clojure o)))  
+  (into [] (map bacnet->clojure o)))
 
 ;; methods for java
 

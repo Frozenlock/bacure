@@ -72,7 +72,8 @@
   device configs. Please note that many properties CANNOT be changed
   while the device is initialized (:object-identifier for example) and
   will simply be discarded." [properties-smap]
-  (let [valid-properties (keys (dissoc (get-configs) :object-list)) ;; what are the keys we should expect
+  (let [valid-properties (->> (keys (dissoc (get-configs) :object-list)) ;; what are the keys we should expect
+                              (cons :description))
         filtered-properties (select-keys properties-smap valid-properties)]
     ;; filter out any properties we are not expecting. This allows the
     ;; user to give a map containing other values.
@@ -141,6 +142,11 @@
        ld)))
 
 ;;;;;;
+
+(defn i-am-broadcast
+  "Send an 'I am' broadcast on the network." []
+  (->> (.getIAm @local-device)
+       (.sendGlobalBroadcast @local-device)))
 
 
 (defn initialize
