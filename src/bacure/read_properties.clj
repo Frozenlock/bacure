@@ -58,8 +58,9 @@
   return as many object-property-identifiers. If object is not an
   array, return nil." [device-id object-identifier property-reference]
   (try
-    (let [size (read-single-property device-id object-identifier
-                                     [property-reference 0])] ;; 0 return the array length
+    (let [size (-> (read-single-property device-id object-identifier
+                                         [property-reference 0]) ;; 0 return the array length
+                   c/bacnet->clojure)]
       (into []
             (for [index (range 1 (inc size))]
               [object-identifier [property-reference index]])))
