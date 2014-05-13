@@ -12,6 +12,6 @@ Nothing.. still in heavy development.
 
 ** License
 
-Copyright © 2013 Frozenlock
+Copyright © 2014 Frozenlock
 
 GNU General Public License version 3.0 (GPLv3)

@@ -1,6 +1,6 @@
-(defproject bacure "0.3.20"
+(defproject bacure "0.3.21"
   :description "A Clojure wrapper for the BAC4j library"
-  :url "https://bacnethelp.com"
+  :url "https://hvac.io"
   :license {:name "GNU General Public License V3"
             :url "http://www.gnu.org/licenses/gpl-3.0.html"}
   :dependencies [[org.clojure/clojure "1.4.0"]

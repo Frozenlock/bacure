@@ -277,7 +277,9 @@
 
 (defn map-or-num [map key-or-num]
   (if (keyword? key-or-num)
-    (get map key-or-num)
+    (if-let [[_ n] (re-find #"unknown-(\d+)" (name key-or-num))]
+      (read-string n)
+      (get map key-or-num))
     key-or-num))
 
 (defn c-object-type
