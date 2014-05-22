@@ -1,7 +1,13 @@
 (ns bacure.remote-device
   (:require [bacure.coerce :as coerce]           
             [bacure.local-device :as ld]
-            [bacure.read-properties :as rp]))
+            [bacure.read-properties :as rp]
+
+            ;; recurring jobs
+            [chime :refer [chime-ch]]
+            [clj-time.core :as t]
+            [clj-time.periodic :refer [periodic-seq]]
+            [clojure.core.async :as a :refer [<! go-loop]]))
 
 
 (import '(com.serotonin.bacnet4j 
@@ -10,7 +16,7 @@
           service.confirmed.DeleteObjectRequest
           service.confirmed.WritePropertyRequest
           service.unconfirmed.WhoIsRequest
-          ))
+          exception.BACnetTimeoutException))
 
 
 (defn rd
@@ -73,7 +79,7 @@
     [d (.getName (rd d))]))
 
 (defn all-extended-information
-  "Make sure that we have the extended information of every known
+  "Make sure we have the extended information of every known
    remote devices.
 
    Can be used some time after the network discovery mechanism, as
@@ -160,3 +166,71 @@
 ;  "Set all the given objects properties in the remote device."
 
 ;; todo... must make sure to use write-property-multiple if available.
+
+
+
+;; ================================================================
+;; Maintenance of the remote devices list
+;; ================================================================
+
+(defn is-alive? 
+  "Check if the remote device is still alive. This is the closest
+  thing to a 'ping' in the BACnet world." [device-id]
+
+  (try ;; try to read the :system-status property. In case of timeout,
+       ;; catch the exception and return nil.
+    (rp/read-properties device-id [[[:device device-id] :system-status]])
+       (catch BACnetTimeoutException e nil)))
+
+(defn remove-remote-device
+  "Remove a remote device from the local device table.
+
+   WARNING: Uses a custom function not yet in the official bacnet4j
+   library." [device-id]
+   (.removeRemoteDevice @ld/local-device device-id))
+
+(defn remove-if-dead 
+  "Remove the remote device from the local table if it fails to answer
+  in a timely manner (determined by the timeout)."
+  [device-id]
+  (println "ping")
+  (when-not (is-alive? device-id)
+    (println (str "Device " device-id " is not answering... removing from local table."))
+    (remove-remote-device device-id)))
+
+(defn clean-remote-devices-table
+  "Remove all the remote devices not answering our 'ping'.
+
+   You should probably call this function every X amount of time to
+   keep the local list of remote devices clean." []
+  (doall
+   (pmap remove-if-dead (remote-devices))))
+
+;;;;
+
+(def ^:private cleaning-ch (atom (a/chan)))
+
+(defn- reset-cleaning-ch! []
+  (reset! cleaning-ch 
+          (chime-ch 
+           (periodic-seq (t/now)
+                         (-> 10 t/minutes))
+           {:ch (a/chan (a/sliding-buffer 1))})))
+
+(defn disable-automatic-rd-cleaning!
+  "Stop the automatic remote devices list cleaning. Useful if you have
+  a slow network and don't want to send non-critical packets, or if
+  you want to prevent a network request while you do an
+  operation."[]
+  (a/close! @cleaning-ch))
+
+(defn start-automatic-rd-cleaning!
+  "Check if the remote devices are alive every 10 minutes. If they aren't,
+   remove them from the remote devices list." []
+   (disable-automatic-rd-cleaning!)
+   (reset-cleaning-ch!)
+   (let [chimes @cleaning-ch]
+     (go-loop []
+              (when-let [time (<! chimes)]
+                (clean-remote-devices-table)
+                (recur)))))

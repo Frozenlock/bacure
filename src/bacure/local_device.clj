@@ -87,8 +87,9 @@
    :port 47808
    :model-name "Bacure"
    :vendor-identifier 697
-   :description "BACnet device running on the open source Bacure stack. See www.bacnethelp.com for details."
-   :vendor-name "BACnetHelp.com"})
+   :description (str "BACnet device running on the open source Bacure stack. "
+                     "See https://hvac.io/docs/wacnet for details.")
+   :vendor-name "HVAC.IO"})
 
 
 (defn new-local-device
