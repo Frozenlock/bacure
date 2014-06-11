@@ -9,8 +9,8 @@
   "Create a local-device, load its config file, initialize it, and
   find the remote devices." [& configs]
   (ld/load-local-device-backup (first configs))
-  (future (do (rd/discover-network)
-              (rd/start-automatic-rd-cleaning!)) 
+  (future (rd/discover-network)
+          (rd/start-automatic-rd-cleaning!) 
           true))
 
 

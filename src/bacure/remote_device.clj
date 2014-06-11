@@ -4,10 +4,7 @@
             [bacure.read-properties :as rp]
 
             ;; recurring jobs
-            [chime :refer [chime-ch]]
-            [clj-time.core :as t]
-            [clj-time.periodic :refer [periodic-seq]]
-            [clojure.core.async :as a :refer [<! go-loop]]))
+            [doevery.core :as d-e]))
 
 
 (import '(com.serotonin.bacnet4j 
@@ -193,7 +190,6 @@
   "Remove the remote device from the local table if it fails to answer
   in a timely manner (determined by the timeout)."
   [device-id]
-  (println "ping")
   (when-not (is-alive? device-id)
     (println (str "Device " device-id " is not answering... removing from local table."))
     (remove-remote-device device-id)))
@@ -208,29 +204,16 @@
 
 ;;;;
 
-(def ^:private cleaning-ch (atom (a/chan)))
-
-(defn- reset-cleaning-ch! []
-  (reset! cleaning-ch 
-          (chime-ch 
-           (periodic-seq (t/now)
-                         (-> 10 t/minutes))
-           {:ch (a/chan (a/sliding-buffer 1))})))
 
 (defn disable-automatic-rd-cleaning!
   "Stop the automatic remote devices list cleaning. Useful if you have
   a slow network and don't want to send non-critical packets, or if
   you want to prevent a network request while you do an
   operation."[]
-  (a/close! @cleaning-ch))
+  (d-e/stop-pool))
 
 (defn start-automatic-rd-cleaning!
   "Check if the remote devices are alive every 10 minutes. If they aren't,
    remove them from the remote devices list." []
    (disable-automatic-rd-cleaning!)
-   (reset-cleaning-ch!)
-   (let [chimes @cleaning-ch]
-     (go-loop []
-              (when-let [time (<! chimes)]
-                (clean-remote-devices-table)
-                (recur)))))
+   (d-e/do-every (* 1000 60 10) clean-remote-devices-table "Clean remote devices table"))
