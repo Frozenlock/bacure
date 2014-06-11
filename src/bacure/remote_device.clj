@@ -213,7 +213,9 @@
   (d-e/stop-pool))
 
 (defn start-automatic-rd-cleaning!
-  "Check if the remote devices are alive every 10 minutes. If they aren't,
-   remove them from the remote devices list." []
-   (disable-automatic-rd-cleaning!)
-   (d-e/do-every (* 1000 60 10) clean-remote-devices-table "Clean remote devices table"))
+  "Check if the remote devices are alive every X minutes (10 by default). If they aren't,
+   remove them from the remote devices list."
+  ([] (start-automatic-rd-cleaning! 10))
+  ([time]
+     (disable-automatic-rd-cleaning!)
+     (d-e/do-every (* 1000 60 time) clean-remote-devices-table "Clean remote devices table")))

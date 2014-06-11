@@ -10,7 +10,6 @@
   find the remote devices." [& configs]
   (ld/load-local-device-backup (first configs))
   (future (rd/discover-network)
-          (rd/start-automatic-rd-cleaning!) 
           true))
 
 
