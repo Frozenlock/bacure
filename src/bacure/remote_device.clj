@@ -21,6 +21,19 @@
   [device-id]
   (.getRemoteDevice @ld/local-device device-id))
 
+(defn networking-info
+  "Return a map with the networking info of the remote device. (The
+  network number, the IP address, the port...)"
+  [device-id]
+  (let [rd-address (.getAddress (rd device-id))
+        octet-string (.getMacAddress rd-address)
+        ip (.toIpString octet-string)
+        port (.getPort octet-string)]
+    {:network-number (coerce/bacnet->clojure (.getNetworkNumber rd-address))
+     :ip-address ip
+     :port port
+     :bacnet-mac-address (str (.getMacAddress rd-address))}))
+
 (defn services-supported
   "Return a map of the services supported by the remote device."
   [device-id]

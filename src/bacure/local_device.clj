@@ -117,9 +117,9 @@
 
    The local-address will default to \"0.0.0.0\", also known as the
    'anylocal'. (Default by the underlying BACnet4J library.) This is
-   required on Linux and Solaris machines in order to catch packet
-   sent as a broadcast. You can manually change it, but unless you
-   know exactly what you are doing, bad things will happen.
+   required on Linux, Solaris and some Windows machines in order to
+   catch packet sent as a broadcast. You can manually change it, but
+   unless you know exactly what you are doing, bad things will happen.
 
    The 'other-configs' is any configuration returned when using the
    function 'get-configs'. These configuation can be set when the
