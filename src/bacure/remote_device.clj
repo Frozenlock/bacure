@@ -96,8 +96,10 @@
    some devices might take a while to answer the WhoIs.
 
    Remote devices are queried in parallel." []
-   (try (doall (pmap extended-information (remote-devices)))
-        (catch Exception e)))
+   (doall
+    (pmap #(try (extended-information %)
+                (catch Exception e))
+          (remote-devices))))
 
 
 (defn find-remote-devices
