@@ -164,11 +164,12 @@
   ;; try to bind to the bacnet port
 
   (if (.isInitialized @local-device)
-    (do (println "The local device is already initialized.") true)
-    (let [port-bind (try (do (.initialize @local-device) true)
+    (println "The local device is already initialized.")
+    (let [port (or (:port (get-configs)) 47808)
+          port-bind (try (do (.initialize @local-device) true)
                          (catch java.net.BindException e
-                           (do (println (str "*Error*: The BACnet port is already bound to another "
-                                             "software.\n Please close the other software and try again."))
+                           (do (println (str "\n*Error*: The BACnet port ("port") is already bound to another "
+                                             "software.\n\t Please close the other software and try again.\n"))
                                (throw e))))]
       ;; once we have the port, load the local programs
       (try (save/load-program)  ;; Anything in the program will be executed.
