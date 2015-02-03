@@ -64,6 +64,7 @@
         properties ((fn [x] (if (coll? x) x [x])) properties)]
     (rp/read-properties-multiple-objects device-id object-identifiers properties)))
 
+
 (defn remote-object-properties
   "Query a remote device and return the properties values
    Example: (remote-object-properties 1234 [:analog-input 0] :all)

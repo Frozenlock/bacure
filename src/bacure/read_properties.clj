@@ -204,6 +204,11 @@
          (map (fn [x] [oid x]) prop-refs))
        (apply concat)))
 
+(defn compact-obj-prop-ref
+  "Inverse of 'expand-obj-prop-ref'."
+  [obj-prop-refs]
+  (for [[oid oid-props] (group-by first obj-prop-refs)]
+    (concat [oid] (map last oid-props))))
 
 (defn read-property-multiple
   "read-access-specification should be of the form:
@@ -221,10 +226,13 @@
   (->> (try (read-property-multiple* device-id obj-prop-references)
             (catch Exception e
               (cond
-               (not *nil-on-APDU-exception*) (throw e)
-               (> (count obj-prop-references) 1) :obj-prop-ref-size-problem
+               (not *nil-on-APDU-exception*) (throw e) ;; maybe give up immediately
+               
+               (> (count obj-prop-references) 1) :obj-prop-ref-size-problem ;; too many objects?
+               
                ((comp seq rest rest first) obj-prop-references) ;; multiple property-identifier?
                :expand-obj-prop-ref ;;expand them before we try an array read.
+               
                (not (coll? ((comp first next first) obj-prop-references))) ;;not already an array index
                {:partitioned-array (apply (partial partition-array device-id)
                                           (first obj-prop-references))})))
@@ -233,9 +241,12 @@
                              (read-property-multiple device-id opr))
                            (apply concat)
                            (remove nil?))
+                      
                       (= x :expand-obj-prop-ref) (read-property-multiple
                                                   device-id (expand-obj-prop-ref obj-prop-references))
+                      
                       (map? x) [(read-array-in-chunks device-id (:partitioned-array x))]
+                      
                       :else x)))))
 
 ;; ================================================================

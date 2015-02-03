@@ -59,18 +59,19 @@
   (let [dev (rd device-id)]
     (when-not (extended-information? device-id)
       ;; first step is to see if the device support read-property-multiple to enable faster read
-      (let [services 
-            (-> (rp/read-properties device-id [ [[:device device-id] :protocol-services-supported]])
-                first :protocol-services-supported)]
-        (.setServicesSupported dev (coerce/c-services-supported services)))
-      ;; then we can query for more info
-      (let [result (first (rp/read-properties device-id 
-                                              [ [[:device device-id] :object-name 
-                                                 :protocol-version :protocol-revision]]))]
-        (.setName dev (:object-name result))
-        (.setProtocolVersion dev (coerce/c-unsigned (:protocol-version result)))
-        (.setProtocolRevision dev (coerce/c-unsigned (:protocol-revision result)))
-        result))))
+      (when-let [services ;; don't do anything else if we can't get the protocol supported
+                 (-> (rp/read-individually device-id [[[:device device-id] :protocol-services-supported]])
+                     (first)
+                     (:protocol-services-supported))]
+        (.setServicesSupported dev (coerce/c-services-supported services))
+        ;; then we can query for more info
+        (let [result (first (rp/read-properties device-id 
+                                                [ [[:device device-id] :object-name 
+                                                   :protocol-version :protocol-revision]]))]
+          (.setName dev (:object-name result))
+          (.setProtocolVersion dev (coerce/c-unsigned (:protocol-version result)))
+          (.setProtocolRevision dev (coerce/c-unsigned (:protocol-revision result)))
+          result)))))
 
 (defn remote-devices
   "Return the list of the current remote devices. These devices must
@@ -116,6 +117,13 @@
                            (coerce/c-unsigned (or min-range 0))
                            (coerce/c-unsigned (or max-range 4194304)))
                           (WhoIsRequest.))))
+
+(defn find-remote-device
+  "Send a WhoIs for a single device-id, effectively finding a single
+  device. Some devices seem to ignore a general WhoIs broadcast, but
+  will answer a WhoIs request specifically for their ID."
+  [id]
+  (find-remote-devices {:min-range id :max-range id}))
 
 
 (defn- find-remote-devices-and-extended-information
@@ -192,7 +200,7 @@
   (try ;; try to read the :system-status property. In case of timeout,
        ;; catch the exception and return nil.
     (rp/read-properties device-id [[[:device device-id] :system-status]])
-       (catch BACnetTimeoutException e nil)))
+       (catch Exception e nil)))
 
 (defn remove-remote-device
   "Remove a remote device from the local device table.

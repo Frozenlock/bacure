@@ -158,11 +158,24 @@
   if needed.
 
   For more information on the local-device 'programs' operations, see
-  the bacure.local-save namespace."[]
-  (.initialize @local-device)
-  (try (save/load-program)  ;; Anything in the program will be executed.
-       (catch Exception e (println (str "Uh oh... couldn't load the local device program:\n"
-                                        (.getMessage e))))))
+  the bacure.local-save namespace.
+
+  Return true if initializing (binding to port) is successful."[]
+  ;; try to bind to the bacnet port
+
+  (if (.isInitialized @local-device)
+    (do (println "The local device is already initialized.") true)
+    (let [port-bind (try (do (.initialize @local-device) true)
+                         (catch java.net.BindException e
+                           (do (println (str "*Error*: The BACnet port is already bound to another "
+                                             "software.\n Please close the other software and try again."))
+                               (throw e))))]
+      ;; once we have the port, load the local programs
+      (try (save/load-program)  ;; Anything in the program will be executed.
+           (catch Exception e (println (str "Uh oh... couldn't load the local device program:\n"
+                                            (.getMessage e)))))
+      ;; return true if we are bound to the port
+      port-bind)))
 
 (defn terminate
   "Terminate the local device, freeing any bound port in the process."[]
