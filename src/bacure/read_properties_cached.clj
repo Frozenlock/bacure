@@ -20,7 +20,7 @@
   (reset! remote-properties-cache
           (cache/ttl-cache-factory {} :ttl ttl)))
 
-(defn store!
+(defn- store!
   "Store the property value into the cache."
   [device-id prop-ref value]
   (swap! remote-properties-cache assoc [device-id prop-ref]
@@ -28,18 +28,13 @@
           (last prop-ref) value}))
 
 
-(defn get-cached-prop
+(defn- get-cached-prop
   "Return the cached property, or nil if not found."
   [device-id prop-ref]
   (cache/lookup @remote-properties-cache [device-id prop-ref]))
 
-(comment
-  (store! 10222 [[:analog-input 0] :present-value] 10.22)
-  (get-cached-prop 10222 [[:analog-input 0] :present-value])
-  )
 
-
-(defn merge-by-oid [prop-coll]
+(defn- merge-by-oid [prop-coll]
   (->> (group-by :object-identifier prop-coll)
        (vals)
        (map (partial apply merge))))
@@ -62,7 +57,7 @@
 ;;; the magic property type.
 
 
-(defn is-special?
+(defn- is-special?
   "True if the property is :all, :required or :optional.
   Support only single properties (result of `expand-prop-refs`)."
   [prop-ref]
@@ -71,9 +66,9 @@
   (let [[object-identifier property] prop-ref]
     (if (#{:all :required :optional} property)
       true)))
-  
 
-(defn read-and-cache-special-properties
+
+(defn- read-and-cache-special-properties
   "Like 'read-properties', but will cache any special properties it
   encounters before returning the read result."
   [device-id props]
