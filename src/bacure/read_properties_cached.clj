@@ -20,12 +20,26 @@
   (reset! remote-properties-cache
           (cache/ttl-cache-factory {} :ttl ttl)))
 
+
+(defn- is-special?
+  "True if the property is :all, :required or :optional.
+  Support only single properties (result of `expand-prop-refs`)."
+  [prop-ref]
+  (assert (-> prop-ref rest rest seq not)
+          "Property reference can only have a single property.")
+  (let [[object-identifier property] prop-ref]
+    (if (#{:all :required :optional} property)
+      true)))
+
+
 (defn- store!
   "Store the property value into the cache."
   [device-id prop-ref value]
   (swap! remote-properties-cache assoc [device-id prop-ref]
-         {:object-identifier (first prop-ref)
-          (last prop-ref) value}))
+         (if (is-special? prop-ref)
+           value
+           {:object-identifier (first prop-ref)
+            (last prop-ref) value})))
 
 
 (defn- get-cached-prop
@@ -57,16 +71,7 @@
 ;;; the magic property type.
 
 
-(defn- is-special?
-  "True if the property is :all, :required or :optional.
-  Support only single properties (result of `expand-prop-refs`)."
-  [prop-ref]
-  (assert (-> prop-ref rest rest seq not)
-          "Property reference can only have a single property.")
-  (let [[object-identifier property] prop-ref]
-    (if (#{:all :required :optional} property)
-      true)))
-
+  
 
 (defn- read-and-cache-special-properties
   "Like 'read-properties', but will cache any special properties it
