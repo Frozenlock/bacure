@@ -682,8 +682,9 @@
                      bacnet->clojure)]
     (try {prop-ref
           (bacnet->clojure (.getReadResult o))}
-         (catch Exception e (when *verbose*
-                              (print (str (.getMessage e) " --- " prop-ref )))))))
+         (catch Exception e (do (when *verbose*
+                                  (print (str (.getMessage e) " --- " prop-ref )))
+                                {prop-ref nil})))))
 
 ;; (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ReadAccessResult
 ;;   [^ReadAccessResult o]
