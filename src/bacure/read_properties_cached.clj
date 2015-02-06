@@ -44,19 +44,66 @@
        (vals)
        (map (partial apply merge))))
 
+;; (defn special-identifier? [prop-id]
+;;   (#{:all :required :optional} prop-id)
+
+
+
+;;; Ok, now this is a pain in the ass. Usually, the remote devices
+;;; will send back the property/properties we asked
+;;; for. (:present-value, :object-name, etc...)
+
+;;; There are 3 exceptions: :all :required :optional. Those are
+;;; 'magic' property type that will return *OTHER* properties.
+;;; This means that by sending :all, we could find ourselves
+;;; with :object-type and :object-name. 
+
+;;; If we only cache the property returned, we will never cache any of
+;;; the magic property type.
+
+
+(defn is-special?
+  "True if the property is :all, :required or :optional.
+  Support only single properties (result of `expand-prop-refs`)."
+  [prop-ref]
+  (assert (-> prop-ref rest rest seq not)
+          "Property reference can only have a single property.")
+  (let [[object-identifier property] prop-ref]
+    (if (#{:all :required :optional} property)
+      true)))
+  
+
+(defn read-and-cache-special-properties
+  "Like 'read-properties', but will cache any special properties it
+  encounters before returning the read result."
+  [device-id props]
+  (let [[special-props normal-props]
+        (-> (group-by is-special? props)
+            ((fn [g] [(get g true) (get g nil)])))]
+    (->> (into (for [p special-props] ;; read the special props one at a time
+                 (let [values (first (rp/read-properties device-id [p]))]
+                   ;; should only have the values of a single object,
+                   ;; so the collection should have a single element.
+                   (store! device-id p values) ;; cache the special properties
+                   values))
+               (rp/read-properties device-id normal-props))
+         (group-by :object-identifier)
+         (vals)
+         (apply merge))))
+
+
+
+;;; Main function
 
 (defn read-properties-cached
   "Retrieve remote objects properties and cache them for a given
   amount of time.
-  
-  CANNOT return cached data for :all :required and :optional, but will
-  cache the properties returned by those reads.
 
   As for the normal read-properties, format for
   object-property-references should be:
 
    [ [[:analog-input 0] :description :object-name]   <--- multiple properties
-     [[:device 1234] [:object-list 0]                <--- array access
+     [[:device 1234] [:object-list 0]]                <--- array access
      [[:analog-ouput 1] :present-value]  ...]"
   
   [device-id object-property-references]
@@ -71,7 +118,8 @@
         non-cached-props (s/difference (set expanded-prop-refs) (set cached-props))
         cached-results (map last cached-props-with-values)
         ;; read the non-cached remote properties
-        new-reads (rp/read-properties device-id non-cached-props)]
+        ;; because they are already expended
+        new-reads (read-and-cache-special-properties device-id non-cached-props)]
     ;; cache all the new remote reads
     (doseq [properties-per-object new-reads]
       (let [oid (:object-identifier properties-per-object)]
