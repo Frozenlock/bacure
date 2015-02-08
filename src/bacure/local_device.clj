@@ -214,7 +214,7 @@
 
 
 (defn remove-object
-  "Remove a local object"
+  "Remove a local object by its object identifier."
   [object-map]
   (.removeObject @local-device
                  (coerce/c-object-identifier (:object-identifier object-map))))
