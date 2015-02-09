@@ -94,53 +94,54 @@
 
 (defn new-local-device
   "Return a new configured BACnet local device . (A device is required
-   to communicate over the BACnet network.). To terminate it, use the
-   java method `terminate'. If needed, the initial configurations are
-   available in the atom 'local-device-configs.
+  to communicate over the BACnet network.). Use the function
+  'initialize' and 'terminate' to bind and unbind the device to the
+  BACnet port. If needed, the initial configurations are available in
+  the atom 'local-device-configs.
 
-   The optional config map can contain the following:
-   :device-id <number>
-   :broadcast-address <string>
-   :port <number>
-   :local-address <string> <----- You probably don't want to use it.
-   :'other-configs' <string> OR <number> OR other
+  The optional config map can contain the following:
+  :device-id <number>
+  :broadcast-address <string>
+  :port <number>
+  :local-address <string> <----- You probably don't want to use it.
+  :'other-configs' <string> OR <number> OR other
 
-   The device ID is the device identifier on the network. It should be
-   unique.
+  The device ID is the device identifier on the network. It should be
+  unique.
 
-   The broadcast-address is the address on which we send 'WhoIs'. You
-   should not have to provide anything for this, unless you have
-   multiple interfaces or want to trick your machine into sending to a
-   'fake' broadcast address.
+  The broadcast-address is the address on which we send 'WhoIs'. You
+  should not have to provide anything for this, unless you have
+  multiple interfaces or want to trick your machine into sending to a
+  'fake' broadcast address.
 
-   Port and destination port are the BACnet port, usually 47808.
+  Port and destination port are the BACnet port, usually 47808.
 
-   The local-address will default to \"0.0.0.0\", also known as the
-   'anylocal'. (Default by the underlying BACnet4J library.) This is
-   required on Linux, Solaris and some Windows machines in order to
-   catch packet sent as a broadcast. You can manually change it, but
-   unless you know exactly what you are doing, bad things will happen.
+  The local-address will default to \"0.0.0.0\", also known as the
+  'anylocal'. (Default by the underlying BACnet4J library.) This is
+  required on Linux, Solaris and some Windows machines in order to
+  catch packet sent as a broadcast. You can manually change it, but
+  unless you know exactly what you are doing, bad things will happen.
 
-   The 'other-configs' is any configuration returned when using the
-   function 'get-configs'. These configuation can be set when the
-   device is created simply by providing them in the arguments. For
-   example, to change the vendor name, simply add ':vendor-name \"some
-   vendor name\"'."
+  The 'other-configs' is any configuration returned when using the
+  function 'get-configs'. These configuation can be set when the
+  device is created simply by providing them in the arguments. For
+  example, to change the vendor name, simply add '{:vendor-name \"some
+  vendor name\"}'."
   ([] (new-local-device nil))
   ([configs-map]
-     (let [configs (merge default-configs configs-map)
-           device-id (or (:device-id configs) (last (:object-identifier configs)) (:device-id default-configs))
-           broadcast-address (or (:broadcast-address configs)
-                                 (net/get-broadcast-address (or (:local-address configs) (net/get-any-ip))))
-           local-address (or (:local-address configs) com.serotonin.bacnet4j.npdu.ip.IpNetwork/DEFAULT_BIND_IP)
-           port (or (:port configs) com.serotonin.bacnet4j.npdu.ip.IpNetwork/DEFAULT_PORT)
-           tp (->> (ip-network broadcast-address port local-address)
-                   (transport))
-           ld (LocalDevice. device-id tp)]
-       (reset! local-device ld)
-       (update-configs configs)
-       (reset! local-device-configs configs)
-       ld)))
+   (let [configs (merge default-configs configs-map)
+         device-id (or (:device-id configs) (last (:object-identifier configs)) (:device-id default-configs))
+         broadcast-address (or (:broadcast-address configs)
+                               (net/get-broadcast-address (or (:local-address configs) (net/get-any-ip))))
+         local-address (or (:local-address configs) com.serotonin.bacnet4j.npdu.ip.IpNetwork/DEFAULT_BIND_IP)
+         port (or (:port configs) com.serotonin.bacnet4j.npdu.ip.IpNetwork/DEFAULT_PORT)
+         tp (->> (ip-network broadcast-address port local-address)
+                 (transport))
+         ld (LocalDevice. device-id tp)]
+     (reset! local-device ld)
+     (update-configs configs)
+     (reset! local-device-configs configs)
+     ld)))
 
 ;;;;;;
 

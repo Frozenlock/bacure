@@ -9,6 +9,7 @@
   "Create a local-device, load its config file, initialize it, and
   find the remote devices." [& configs]
   (ld/load-local-device-backup (first configs))
+  (ld/i-am-broadcast)
   (future (rd/discover-network)
           true))
 
