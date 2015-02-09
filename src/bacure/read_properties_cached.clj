@@ -7,7 +7,7 @@
 ;; nothing.
 
 (def cache-ttl
-  (atom (* 1000 60 2)))  ; basic caching of 2 minutes
+  (atom (* 1000 60 5)))  ; basic caching of 5 minutes
 
 (def remote-properties-cache
   (atom (cache/ttl-cache-factory {} :ttl @cache-ttl)))
