@@ -53,10 +53,6 @@
        (vals)
        (map (partial apply merge))))
 
-;; (defn special-identifier? [prop-id]
-;;   (#{:all :required :optional} prop-id)
-
-
 
 ;;; Ok, now this is a pain in the ass. Usually, the remote devices
 ;;; will send back the property/properties we asked

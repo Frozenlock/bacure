@@ -9,5 +9,5 @@
                  [org.clojure/core.cache "0.6.4"]
                  [org.clojars.frozenlock/doevery "0.1.1"]]
   :plugins [[codox "0.8.6"]]
-  :codox {:src-dir-uri "https://github.com/Frozenlock/bacure/blob/master"
+  :codox {:src-dir-uri "https://github.com/Frozenlock/bacure/blob/master/"
           :src-linenum-anchor-prefix "L"})
