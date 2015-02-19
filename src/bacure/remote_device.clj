@@ -78,8 +78,9 @@
   be in the local table. To scan a network, use `discover-network'."
   []
   (try
-    (for [rd (seq (.getRemoteDevices @ld/local-device))]
-      (.getInstanceNumber rd))
+    (->> (for [rd (seq (.getRemoteDevices @ld/local-device))]
+           (.getInstanceNumber rd))
+         (into #{})) ;; into a set to force unique IDs
     (catch Exception e))) ;; if there isn't any remote device, throws
                           ;; a null exception
 
