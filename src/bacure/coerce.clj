@@ -32,6 +32,7 @@
             type.constructed.BACnetError
             type.constructed.Choice
             type.constructed.CovSubscription
+            type.constructed.DailySchedule
             type.constructed.Destination
             type.constructed.DeviceObjectPropertyReference
             type.constructed.EventTransitionBits            
@@ -47,9 +48,11 @@
             type.constructed.SetpointReference
             type.constructed.WriteAccessSpecification
             type.constructed.DateTime
+            type.constructed.DateRange
             type.constructed.ObjectPropertyReference
             type.constructed.ObjectTypesSupported
             type.constructed.TimeStamp
+            type.constructed.TimeValue
             type.constructed.ReadAccessSpecification
             type.constructed.ReadAccessResult
             type.constructed.ReadAccessResult$Result
@@ -69,6 +72,7 @@
             type.enumerated.Reliability
             type.primitive.CharacterString
             type.primitive.ObjectIdentifier
+            type.primitive.Primitive
             type.primitive.Real
             type.primitive.UnsignedInteger
             type.primitive.Unsigned16
@@ -382,6 +386,9 @@
     (DateTime. (Date. (.toGregorianCalendar t))
                (Time.)))) ;we don't need to add any time
 
+(defn c-date-range [[start-string end-string]]
+  (DateRange. (c-date start-string) (c-date end-string)))
+
 (defn c-time [string]
   (let [t (clj-time.local/to-local-date-time
            (clj-time.format/parse
@@ -389,12 +396,19 @@
     (com.serotonin.bacnet4j.type.primitive.Time.
      (time/hour t)
      (time/minute t)
-     (time/sec t)
+     (time/second t)
      (time/milli t))))
+
   
 (defn c-time-stamp [string]
   (TimeStamp.
    (c-date-time string)))
+
+(declare c-primitive)
+
+(defn c-time-value [[time value]]
+  (TimeValue. (c-time time) (c-primitive value)))
+
 
 (defn c-accumulator-status [value]
   (let [subclass-map accumulator-status-map]
@@ -483,6 +497,11 @@
   (SequenceOf. (ArrayList. (map c-fn coll))))
 
 
+
+(defn c-daily-schedule [list-of-time-values]
+  (c-array c-time-value list-of-time-values))
+
+
 ;; (defn c-bacnet-object [object-identifier]
 ;;   (com.serotonin.bacnet4j.obj.BACnetObject. 
 ;;    @bacure.local-device/local-device (c-object-identifier object-identifier)))
@@ -510,7 +529,30 @@
     (c-array c-property-reference property-references)))
 
 
-    
+
+
+(defn c-primitive
+  "Given 'something', we take an educated guess as to what this should
+  become. (Contrary to everything else in the BACnet world, the
+  TimeValue object accepts MANY different types of data. As such, we
+  can't just convert it to a bacnet4j equivalent as we usually do.)"
+  [something]
+  (let [try-fn (fn [coerce-fn value]
+                 (try (coerce-fn value)
+                      (catch Exception e)))]
+    ;; now try to coerce, in order of 'less likely to be a false
+    ;; match'.
+
+    ;; There's probably others (like Double), but we don't have them
+    ;; implemented yet.
+    (or (try-fn c-object-identifier something)
+        (try-fn c-unsigned-integer something)
+        ;;(try-fn c-signed something) ;; can't really distinguish from unsigned
+        (try-fn c-real something)
+        (try-fn c-time something)
+        (try-fn c-date something)
+        (try-fn c-boolean something)
+        (try-fn c-character-string something))))
 
 
 ;;================================================================
@@ -601,6 +643,18 @@
      (clj-time.format/formatters :date-time)
      (clj-time.coerce/from-long (.getTimeMillis o))))
 
+(defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.DateRange
+  [^DateRange o]
+  (let [start (.getStartDate o)
+        end (.getEndDate o)]
+    (mapv bacnet->clojure [start end])))
+
+
+(defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.DailySchedule
+  [^DailySchedule o]
+  (bacnet->clojure (.getDaySchedule o)))
+
+
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.DeviceObjectPropertyReference
   [^DeviceObjectPropertyReference o]
   (let [data {:device-identifier (bacnet->clojure (.getDeviceIdentifier o))
@@ -683,7 +737,7 @@
     (try {prop-ref
           (bacnet->clojure (.getReadResult o))}
          (catch Exception e (do (when *verbose*
-                                  (print (str (.getMessage e) " --- " prop-ref )))
+                                  (println (str (.getMessage e) " --- " prop-ref )))
                                 {prop-ref nil})))))
 
 ;; (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.ReadAccessResult
@@ -742,6 +796,12 @@
      :out-of-service (.isOutOfService o)
      :overridden (.isOverridden o)})
 
+(defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.TimeValue
+  [^TimeValue o]
+  (let [time (.getTime o)
+        value (.getValue o)]
+    (mapv bacnet->clojure [time value])))
+
 
 ;; methods for type 'primitive'
 
@@ -783,6 +843,8 @@
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.primitive.Time
   [^com.serotonin.bacnet4j.type.primitive.Time o]
   (.toString o)) ;; oh god, why so many time format... just take ISO8601 already
+
+
 
 ;; methods for type 'enumerated'
 
