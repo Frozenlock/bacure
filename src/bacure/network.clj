@@ -59,3 +59,8 @@
           (filter #(instance? Inet4Address %))
           (first)))
     IP-or-url))
+
+(defn to-bytes [IP-or-url]
+  (-> (InetAddress/getByName IP-or-url)
+      (.getAddress)))
+

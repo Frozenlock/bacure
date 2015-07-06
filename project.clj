@@ -1,11 +1,11 @@
-(defproject bacure "0.5.3"
+(defproject bacure "0.5.4"
   :description "A Clojure wrapper for the BAC4j library... and some nice additions."
   :url "https://hvac.io"
   :license {:name "GNU General Public License V3"
             :url "http://www.gnu.org/licenses/gpl-3.0.html"}
-  :dependencies [[org.clojure/clojure "1.6.0"]
+  :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojars.frozenlock/bacnet4j "1.3.11"]
-                 [clj-time "0.7.0"]
+                 [clj-time "0.9.0"]
                  [org.clojure/core.cache "0.6.4"]
                  [org.clojars.frozenlock/doevery "0.1.1"]]
   :plugins [[codox "0.8.6"]]
