@@ -12,7 +12,7 @@ Add the following dependency in your `project.clj`:
 [![Clojars Project](http://clojars.org/bacure/latest-version.svg)](http://clojars.org/bacure)
 
 Check the
-[[http://frozenlock.github.io/bacure/index.html][documentation]]
+[[documentation](http://frozenlock.github.io/bacure/index.html)]
 for the available functions with their descriptions.
 
 ## License
