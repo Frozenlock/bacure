@@ -1,22 +1,26 @@
 (ns bacure.read-properties-cached
   (:require [clojure.core.cache :as cache]
             [bacure.read-properties :as rp]
-            [clojure.set :as s]))
+            [clojure.set :as s]
+            [bacure.local-device :as ld]))
 
 ;; Some caching capabilities to avoid re-querying the network for
 ;; nothing.
 
-(def cache-ttl
-  (atom (* 1000 60 5)))  ; basic caching of 5 minutes
+(defn get-cache-ttl
+  "Return the cache ttl in millis. If not set, default to 5 minutes."
+  []
+  (get @ld/local-device-configs :cache-ttl (* 1000 60 5)))
 
 (def remote-properties-cache
-  (atom (cache/ttl-cache-factory {} :ttl @cache-ttl)))
+  (atom (cache/ttl-cache-factory {} :ttl (get-cache-ttl))))
 
 (defn set-cache-ttl!
   "Set the time-to-live (in millis) for every value in the cache. Will
   clear all values currently cached."
   [ttl]
-  (reset! cache-ttl ttl)
+  (assert (number? ttl) "The time-to-live must be a number")
+  (swap! ld/local-device-configs assoc :cache-ttl ttl)
   (reset! remote-properties-cache
           (cache/ttl-cache-factory {} :ttl ttl)))
 

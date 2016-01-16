@@ -200,7 +200,7 @@
       (try (.setProperty bacnet-object prop) (catch Exception e (println (str (.getMessage e) "\n")))))
     (try (.addObject @local-device
                      bacnet-object)
-         (catch Exception e));; error if object already exists
+         (catch Exception e (println (.getMessage e))));; error if object already exists
     (.getObject @local-device object-id)))
   
 (defn add-or-update-object
