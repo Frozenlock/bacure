@@ -1,5 +1,6 @@
 (ns bacure.remote-device
-  (:require [bacure.coerce :as coerce]           
+  (:require [bacure.coerce :as c]
+            [bacure.coerce.obj :as obj]
             [bacure.local-device :as ld]
             [bacure.read-properties :as rp]
 
@@ -18,77 +19,96 @@
 
 (defn rd
   "Get the remote device by its device-id"
-  [device-id]
-  (.getRemoteDevice @ld/local-device device-id))
+  ([device-id] (rd nil device-id))
+  ([local-device-id device-id]
+   (.getRemoteDevice (ld/local-device-object local-device-id) device-id)))
 
 (defn networking-info
   "Return a map with the networking info of the remote device. (The
   network number, the IP address, the port...)"
-  [device-id]
-  (let [rd-address (.getAddress (rd device-id))
-        octet-string (.getMacAddress rd-address)
-        ip (.toIpString octet-string)
-        port (.getPort octet-string)]
-    {:network-number (coerce/bacnet->clojure (.getNetworkNumber rd-address))
-     :ip-address ip
-     :port port
-     :bacnet-mac-address (str (.getMacAddress rd-address))}))
+  ([device-id] (networking-info nil device-id))
+  ([local-device-id device-id]
+   (let [rd-address (.getAddress (rd local-device-id device-id))
+         octet-string (.getMacAddress rd-address)
+         [_ ip port] (re-find #"(.*):([0-9]*)" (.getDescription octet-string))]
+     {:network-number (c/bacnet->clojure (.getNetworkNumber rd-address))
+      :ip-address ip
+      :port port
+      :bacnet-mac-address (str (.getMacAddress rd-address))})))
 
 (defn services-supported
   "Return a map of the services supported by the remote device."
-  [device-id]
-  (-> (.getServicesSupported (rd device-id))
-      coerce/bacnet->clojure))
+  ([device-id] (services-supported nil device-id))
+  ([local-device-id device-id]
+   (-> (.getServicesSupported (rd local-device-id device-id))
+       c/bacnet->clojure)))
 
 (defn segmentation-supported
   "Return the type of segmentatin supported."
-  [device-id]
-  (-> (.getSegmentationSupported (rd device-id))
-      coerce/bacnet->clojure))
+  ([device-id] (segmentation-supported nil device-id))
+  ([local-device-id device-id]
+   (-> (.getSegmentationSupported (rd local-device-id device-id))
+       c/bacnet->clojure)))
 
-(defn extended-information?
-  "True if we already have the device extended information, nil
-  otherwise." [device-id]
-  (when-let [device (rd device-id)]
-    (.getServicesSupported device)))
+(defn cached-extended-information
+  "Return the cached remote device extended information. Nil if we have nothing." 
+  ([device-id] (cached-extended-information nil device-id))
+  ([local-device-id device-id]
+   (when-let [device (rd local-device-id device-id)]
+     ;; we got the 'extended info' when we have the services supported.
+     (when (.getName device)
+       {:protocol-services-supported (c/bacnet->clojure (.getServicesSupported device))
+        :object-name (c/bacnet->clojure (.getName device))
+        :protocol-version (c/bacnet->clojure (.getProtocolVersion device))
+        :protocol-revision (c/bacnet->clojure (.getProtocolRevision device))}))))
+
+(defn retrieve-extended-information
+  "Retrieve the remote device extended information (name, segmentation,
+  property multiple, etc..) and update it locally.
+  
+  Return the cached extended information."
+  ([device-id] (retrieve-extended-information nil device-id))
+  ([local-device-id device-id]
+   (let [dev (rd local-device-id device-id)]
+     ;; first step is to see if the device support read-property-multiple to enable faster read
+     (when-let [services ;; don't do anything else if we can't get the protocol supported
+                (-> (rp/read-individually local-device-id device-id [[[:device device-id] :protocol-services-supported]])
+                    (first)
+                    (:protocol-services-supported))]
+       (.setServicesSupported dev (c/clojure->bacnet :services-supported services))
+       ;; then we can query for more info
+       (let [result (first (rp/read-properties local-device-id device-id 
+                                               [ [[:device device-id] :object-name 
+                                                  :protocol-version :protocol-revision]]))]
+         (.setName dev (:object-name result))
+         (.setProtocolVersion dev (c/clojure->bacnet :unsigned-integer (:protocol-version result)))
+         (.setProtocolRevision dev (c/clojure->bacnet :unsigned-integer (:protocol-revision result))))
+       (cached-extended-information local-device-id device-id)))))
 
 (defn extended-information
-  [device-id]
-  "Get the remote device extended information (name, segmentation,
-  property multiple, etc..) if we haven't already."
-  (let [dev (rd device-id)]
-    (when-not (extended-information? device-id)
-      ;; first step is to see if the device support read-property-multiple to enable faster read
-      (when-let [services ;; don't do anything else if we can't get the protocol supported
-                 (-> (rp/read-individually device-id [[[:device device-id] :protocol-services-supported]])
-                     (first)
-                     (:protocol-services-supported))]
-        (.setServicesSupported dev (coerce/c-services-supported services))
-        ;; then we can query for more info
-        (let [result (first (rp/read-properties device-id 
-                                                [ [[:device device-id] :object-name 
-                                                   :protocol-version :protocol-revision]]))]
-          (.setName dev (:object-name result))
-          (.setProtocolVersion dev (coerce/c-unsigned (:protocol-version result)))
-          (.setProtocolRevision dev (coerce/c-unsigned (:protocol-revision result)))
-          result)))))
+  "Return the device extended information that we have cached locally,
+  or request it directly to the remote device."
+  ([device-id] (extended-information nil device-id))
+  ([local-device-id device-id]
+   (or (cached-extended-information local-device-id device-id)
+       (retrieve-extended-information local-device-id device-id))))
 
 (defn remote-devices
   "Return the list of the current remote devices. These devices must
   be in the local table. To scan a network, use `discover-network'."
-  []
-  (try
-    (->> (for [rd (seq (.getRemoteDevices @ld/local-device))]
-           (.getInstanceNumber rd))
-         (into #{})) ;; into a set to force unique IDs
-    (catch Exception e))) ;; if there isn't any remote device, throws
-                          ;; a null exception
+  ([] (remote-devices nil))
+  ([local-device-id]
+   (->> (for [rd (seq (.getRemoteDevices (ld/local-device-object local-device-id)))]
+          (.getInstanceNumber rd))
+        (into #{})))) ;; into a set to force unique IDs
 
 (defn remote-devices-and-names
   "Return a list of vector pair with the device-id and its name.
-   -->  ([1234 \"SimpleServer\"])" []
-  (for [d (remote-devices)]
-    [d (.getName (rd d))]))
+   -->  ([1234 \"SimpleServer\"])" 
+  ([] (remote-devices-and-names nil))
+  ([local-device-id]
+   (for [d (remote-devices)]
+     [d (.getName (rd d))])))
 
 (defn all-extended-information
   "Make sure we have the extended information of every known
@@ -97,11 +117,13 @@
    Can be used some time after the network discovery mechanism, as
    some devices might take a while to answer the WhoIs.
 
-   Remote devices are queried in parallel." []
+   Remote devices are queried in parallel." 
+  ([] (all-extended-information nil))
+  ([local-device-id]
    (doall
-    (pmap #(try (extended-information %)
+    (pmap #(try (extended-information local-device-id %)
                 (catch Exception e))
-          (remote-devices))))
+          (remote-devices local-device-id)))))
 
 
 (defn find-remote-devices
@@ -111,30 +133,42 @@
   read-property-multiple. Thus, any property read based solely on this
   remote device discovery might fail. The use of `discover-network' is
   highly recommended, even if it might take a little longer to
-  execute." [&[{:keys [min-range max-range]}]]
-  (.sendGlobalBroadcast @ld/local-device
-                        (if (or min-range max-range)
-                          (WhoIsRequest.
-                           (coerce/c-unsigned (or min-range 0))
-                           (coerce/c-unsigned (or max-range 4194304)))
-                          (WhoIsRequest.))))
+  execute."
+  ([] (find-remote-devices {}))
+  ([{:keys [min-range max-range] :as args}] (find-remote-devices nil args))
+  ([local-device-id {:keys [min-range max-range]}]
+   (.sendGlobalBroadcast (ld/local-device-object local-device-id)
+                         (if (or min-range max-range)
+                           (WhoIsRequest.
+                            (c/clojure->bacnet :unsigned-integer (or min-range 0))
+                            (c/clojure->bacnet :unsigned-integer (or max-range 4194304)))
+                           (WhoIsRequest.)))))
 
 (defn find-remote-device
   "Send a WhoIs for a single device-id, effectively finding a single
   device. Some devices seem to ignore a general WhoIs broadcast, but
   will answer a WhoIs request specifically for their ID."
-  [id]
-  (find-remote-devices {:min-range id :max-range id}))
+  ([id] (find-remote-device nil id))
+  ([local-device-id remote-device-id]
+   (find-remote-devices local-device-id 
+                        {:min-range remote-device-id :max-range remote-device-id})))
 
 
 (defn- find-remote-devices-and-extended-information
   "Sends a WhoIs. For every device discovered,
   get its extended information. Return the remote devices as a list."
-  [&[{:keys [min-range max-range dest-port] :as args}]]
-  (find-remote-devices args)
-  (Thread/sleep 500) ;wait a little to insure we get the responses
-  (all-extended-information)
-  (remote-devices))
+  ([] (find-remote-devices-and-extended-information {}))
+
+  ([{:keys [min-range max-range dest-port] :as args}]
+   (find-remote-devices-and-extended-information nil args))
+
+  ([local-device-id {:keys [min-range max-range dest-port] :as args}]
+   (find-remote-devices local-device-id args)
+   (Thread/sleep 500) ;wait a little to insure we get the responses
+   (all-extended-information local-device-id)
+   (remote-devices local-device-id)))
+
+
 
 (defn discover-network
   "Find remote devices and their extended info. By default, will try
@@ -143,43 +177,84 @@
 
    Should be called in a future call to avoid `hanging' the program
    while waiting for the remote devices to answer."
-  ([] (discover-network 5))
-  ([tries]
+  ([] (discover-network nil))
+  ([local-device-id] (discover-network local-device-id 5))
+  ([local-device-id tries]
      (dorun
-      (->> (repeatedly tries find-remote-devices-and-extended-information)
+      (->> (repeatedly tries #(find-remote-devices-and-extended-information local-device-id {}))
            (take-while empty?)))
-     (seq (remote-devices))))
+     (remote-devices local-device-id)))
+
+
+
+
+
+
 
 (defn create-remote-object
   "Send a 'create object request' to the remote device. Must be given
   at least an :object-identifier OR an :object-type. If
   an :object-identifier isn't given, the numbering of the new object
-  will be choosen by the remote device." [device-id object-map]
-  (let [request (CreateObjectRequest. (if-let [o-id (:object-identifier object-map)]
-                                        (coerce/c-object-identifier o-id)
-                                        (coerce/c-object-type (:object-type object-map)))
-                                      (coerce/encode-properties object-map :object-type :object-identifier
-                                                                :object-list))]
-    (-> (.send @ld/local-device (rd device-id) request)
-        coerce/bacnet->clojure)))
+  will be choosen by the remote device.
+  
+  Will block until we receive a response back, success or failure.
+  If the request times out, an exception is thrown."
+  ([device-id object-map] (create-remote-object nil device-id object-map))
+  ([local-device-id device-id object-map]
+   (let [request (CreateObjectRequest. (if-let [o-id (:object-identifier object-map)]
+                                         (c/clojure->bacnet :object-identifier o-id)
+                                         (c/clojure->bacnet :object-type object-map))
+                                       (obj/encode-properties object-map :object-type :object-identifier
+                                                              :object-list))]
+     (rp/send-request-promise local-device-id device-id request))))
 
 (defn delete-remote-object
-  "Send a 'delete object' request to a remote device."
-  [device-id object-identifier]
-  (.send @ld/local-device (rd device-id)
-         (DeleteObjectRequest. (coerce/c-object-identifier object-identifier))))
+  "Send a 'delete object' request to a remote device.
+  
+   Will block until we receive a response back, success or failure.
+  If the request times out, an exception is thrown."
+  ([device-id object-identifier] (delete-remote-object nil device-id object-identifier))
+  ([local-device-id device-id object-identifier]
+   (let [request (DeleteObjectRequest. (c/clojure->bacnet :object-identifier object-identifier))]
+     (rp/send-request-promise local-device-id device-id request))))
+
+
 
 (defn set-remote-property
-  "Set the given remote object property."
-  [device-id object-identifier property-identifier property-value]
-  (let [obj-type (first object-identifier)
-        encoded-value (coerce/encode-property obj-type property-identifier property-value)
-        request (WritePropertyRequest. (coerce/c-object-identifier object-identifier)
-                                       (coerce/c-property-identifier property-identifier)
-                                       nil
-                                       encoded-value
-                                       nil)]
-    (.send @ld/local-device (rd device-id) request)))
+  "Set the given remote object property.
+  
+   Will block until we receive a response back, success or failure.
+  If the request times out, an exception is thrown."
+  ([device-id object-identifier property-identifier property-value]
+   (set-remote-property nil device-id object-identifier property-identifier property-value))
+  ([local-device-id device-id object-identifier property-identifier property-value]
+   (let [obj-type (first object-identifier)
+         encoded-value (obj/encode-property-value obj-type property-identifier property-value)
+         request (WritePropertyRequest. (c/clojure->bacnet :object-identifier object-identifier)
+                                        (c/clojure->bacnet :property-identifier property-identifier)
+                                        nil
+                                        encoded-value
+                                        nil)]
+     (rp/send-request-promise local-device-id device-id request))))
+
+
+;; (defn set-remote-property
+;;   "Set the given remote object property."
+;;   ([device-id object-identifier property-identifier property-value]
+;;    (set-remote-property nil device-id object-identifier property-identifier property-value))
+;;   ([local-device-id device-id object-identifier property-identifier property-value]
+;;    (let [obj-type (first object-identifier)
+;;          encoded-value (obj/encode-property-value obj-type property-identifier property-value)
+;;          request (WritePropertyRequest. (c/clojure->bacnet :object-identifier object-identifier)
+;;                                         (c/clojure->bacnet :property-identifier property-identifier)
+;;                                         nil
+;;                                         encoded-value
+;;                                         nil)]
+;;      (println request)
+;;      (.send (ld/local-device-object local-device-id) 
+;;             (rd local-device-id device-id) request
+;;             (rp/make-responser-consumer 1 2 3))
+;;      )))
 
 
 
@@ -190,56 +265,56 @@
 
 
 
-;; ================================================================
-;; Maintenance of the remote devices list
-;; ================================================================
+;; ;; ================================================================
+;; ;; Maintenance of the remote devices list
+;; ;; ================================================================
 
-(defn is-alive? 
-  "Check if the remote device is still alive. This is the closest
-  thing to a 'ping' in the BACnet world." [device-id]
+;; (defn is-alive? 
+;;   "Check if the remote device is still alive. This is the closest
+;;   thing to a 'ping' in the BACnet world." [device-id]
 
-  (try ;; try to read the :system-status property. In case of timeout,
-       ;; catch the exception and return nil.
-    (rp/read-properties device-id [[[:device device-id] :system-status]])
-       (catch Exception e nil)))
+;;   (try ;; try to read the :system-status property. In case of timeout,
+;;        ;; catch the exception and return nil.
+;;     (rp/read-properties device-id [[[:device device-id] :system-status]])
+;;        (catch Exception e nil)))
 
-(defn remove-remote-device
-  "Remove a remote device from the local device table.
+;; (defn remove-remote-device
+;;   "Remove a remote device from the local device table.
 
-   WARNING: Uses a custom function not yet in the official bacnet4j
-   library." [device-id]
-   (.removeRemoteDevice @ld/local-device device-id))
+;;    WARNING: Uses a custom function not yet in the official bacnet4j
+;;    library." [device-id]
+;;    (.removeRemoteDevice @ld/local-device device-id))
 
-(defn remove-if-dead 
-  "Remove the remote device from the local table if it fails to answer
-  in a timely manner (determined by the timeout)."
-  [device-id]
-  (when-not (is-alive? device-id)
-    (println (str "Device " device-id " is not answering... removing from local table."))
-    (remove-remote-device device-id)))
+;; (defn remove-if-dead 
+;;   "Remove the remote device from the local table if it fails to answer
+;;   in a timely manner (determined by the timeout)."
+;;   [device-id]
+;;   (when-not (is-alive? device-id)
+;;     (println (str "Device " device-id " is not answering... removing from local table."))
+;;     (remove-remote-device device-id)))
 
-(defn clean-remote-devices-table
-  "Remove all the remote devices not answering our 'ping'.
+;; (defn clean-remote-devices-table
+;;   "Remove all the remote devices not answering our 'ping'.
 
-   You should probably call this function every X amount of time to
-   keep the local list of remote devices clean." []
-  (doall
-   (pmap remove-if-dead (remote-devices))))
+;;    You should probably call this function every X amount of time to
+;;    keep the local list of remote devices clean." []
+;;   (doall
+;;    (pmap remove-if-dead (remote-devices))))
 
-;;;;
+;; ;;;;
 
 
-(defn disable-automatic-rd-cleaning!
-  "Stop the automatic remote devices list cleaning. Useful if you have
-  a slow network and don't want to send non-critical packets, or if
-  you want to prevent a network request while you do an
-  operation."[]
-  (d-e/stop-pool))
+;; (defn disable-automatic-rd-cleaning!
+;;   "Stop the automatic remote devices list cleaning. Useful if you have
+;;   a slow network and don't want to send non-critical packets, or if
+;;   you want to prevent a network request while you do an
+;;   operation."[]
+;;   (d-e/stop-pool))
 
-(defn start-automatic-rd-cleaning!
-  "Check if the remote devices are alive every X minutes (10 by default). If they aren't,
-   remove them from the remote devices list."
-  ([] (start-automatic-rd-cleaning! 10))
-  ([time]
-     (disable-automatic-rd-cleaning!)
-     (d-e/do-every (* 1000 60 time) clean-remote-devices-table "Clean remote devices table")))
+;; (defn start-automatic-rd-cleaning!
+;;   "Check if the remote devices are alive every X minutes (10 by default). If they aren't,
+;;    remove them from the remote devices list."
+;;   ([] (start-automatic-rd-cleaning! 10))
+;;   ([time]
+;;      (disable-automatic-rd-cleaning!)
+;;      (d-e/do-every (* 1000 60 time) clean-remote-devices-table "Clean remote devices table")))

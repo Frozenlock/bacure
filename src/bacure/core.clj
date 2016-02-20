@@ -5,53 +5,64 @@
             [clojure.walk :as walk]))
 
    
-(defn boot-up
+(defn boot-up!
   "Create a local-device, load its config file, initialize it, and
-  find the remote devices." [& configs]
-  (ld/load-local-device-backup (first configs))
-  (ld/i-am-broadcast)
-  (future (rd/discover-network)
-          true))
+  find the remote devices." 
+  ([] (boot-up! nil))
+  ([configs]
+   (ld/load-local-device-backup! (:device-id configs) configs)
+   (ld/i-am-broadcast!)
+   (future (rd/discover-network)
+           true)))
 
 
 (defn find-bacnet-port
-  "Scan ports to see if any BACnet device will respond. If the
-  optionals port-min and port-max aren't given, default to all ports
-  between 47801 and 47820.
-
-  By default each port will wait 500 ms for an answer. Consequently,
-  if you test 20 ports, it will take 10 seconds.
+  "Scan ports to see if any BACnet device will respond. Use port
+  numbers as device-id.
 
   Example use:
-  (find-bacnet-port) ;;will take 10s to scan ports 47801 to 47820
-  (find-bacnet-port :delay 100) ;; scan the same ports, but faster
-  (find-bacnet-port :port-min 47850 :port-max 47900) ;;new port range
+  (find-bacnet-port) ;;will scan ports 47801 to 47820
+  (find-bacnet-port {:delay 100}) ;; scan the same ports, but faster
+  (find-bacnet-port {:port-min 47850 :port-max 47900}) ;;new port range
+
+  The argument is a map of configs for the BACnet devices that will be
+  created (like in `bacure.local-device/new-local-device!'), but it
+  will also accepts these additional fields :
+  
+  - :port-min
+  - :port-max
+  - :delay
+
+  If the optionals port-min and port-max aren't
+  given, default to all ports between 47801 and 47820.
+
+  By default each port will wait 500 ms for an answer.
 
   Even if we could simply send a WhoIs on another port, some BACnet
   devices have bad behaviour and send data back to 'their' port,
   regardless from which port the WhoIs came. In other to maximize our
   chances of finding them, we reset the local device with a new port
-  each time." [&{:keys [delay port-min port-max] :or
-                 {delay 500 port-min 47801 port-max 47820}}]
-  (let [configs (:provided-configs (ld/local-device-backup))
-        results (->> (for [port (range port-min port-max)]
-                       (do (ld/reset-local-device {:port port})
-                           (rd/find-remote-devices)
-                           (Thread/sleep delay)
-                           (when-let [devices (seq (rd/remote-devices))]
-                             {:port port :devices devices})))
-                     (into [])
-                     (remove nil?))]
-    (ld/reset-local-device configs)
-    (future (rd/discover-network))
-    results))
+  each time."
+  ([] (find-bacnet-port nil))
+  ([configs]
+   (let [{:keys [delay port-min port-max] :or
+          {delay 500 port-min 47801 port-max 47820}} configs]
+     (ld/with-temp-devices
+       (->> (for [port (range port-min port-max)]
+                    (future (ld/reset-local-device! port (merge configs {:port port}))
+                            (rd/find-remote-devices port {})
+                            (Thread/sleep delay)
+                            (when-let [devices (seq (rd/remote-devices port))]
+                              {:port port :devices devices})))
+            (map deref)
+            (remove nil?))))))
 
 
 ;; ================================================================
 ;; Remote objects related functions
 ;; ================================================================
 
-(defn remote-object-properties-with-nil
+(defn remote-object-properties-with-error
   "Query a remote device and return the properties values
    Example: (remote-object-properties-with-nil 1234 [:analog-input 0] :all)
    -> {:notification-class 4194303, :event-enable .....}
@@ -60,10 +71,12 @@
    item or a collection.
 
    You probably want to use `remote-object-properties'."
-  [device-id object-identifiers properties]
-  (let [object-identifiers ((fn[x] (if ((comp coll? first) x) x [x])) object-identifiers)
-        properties ((fn [x] (if (coll? x) x [x])) properties)]
-    (rp/read-properties-multiple-objects device-id object-identifiers properties)))
+  ([device-id object-identifiers properties]
+   (remote-object-properties-with-error nil device-id object-identifiers properties))
+  ([local-device-id device-id object-identifiers properties]   
+   (let [object-identifiers ((fn[x] (if ((comp coll? first) x) x [x])) object-identifiers)
+         properties ((fn [x] (if (coll? x) x [x])) properties)]
+     (rp/read-properties-multiple-objects local-device-id device-id object-identifiers properties))))
 
 
 (defn remote-object-properties
@@ -74,38 +87,31 @@
    Both `object-identifiers' and `properties' accept either a single
    item or a collection.
 
-   Discards any properties with a `nil' value (property not found in object)."
-  [device-id object-identifiers properties]
-  (->> (remote-object-properties-with-nil device-id object-identifiers properties)
-       (map (fn [m] (remove #(nil? (val %)) m)))
-       (mapv #(into {} %))))
+   Discards any properties with an error value 
+  (example: property not found in object)."
+  ([device-id object-identifiers properties]
+   (remote-object-properties nil device-id object-identifiers properties))
+  ([local-device-id device-id object-identifiers properties]
+   (->> (remote-object-properties-with-error local-device-id device-id object-identifiers properties)
+        (map (fn [m] (->> (for [[k v] m
+                                :when (not (when (map? v) (:error v)))]
+                            [k v])
+                          (into {})))))))
 
 (defn remote-objects
   "Return a collection of every objects in the remote device.
    -> [[:device 1234] [:analog-input 0]...]"
-  [device-id]
-  (-> (remote-object-properties device-id [:device device-id] :object-list)
-      ((comp :object-list first))))
+  ([device-id] (remote-objects nil device-id))
+  ([local-device-id device-id]
+   (-> (remote-object-properties local-device-id device-id [:device device-id] :object-list)
+       ((comp :object-list first)))))
 
-(defn read-trend-log
-  "A convenience function to retrieve all data from a trend-log (even the log-buffer).
-
-  Example:  (read-trend-log 4589 [:trend-log 1])
-  -> {:object-name \"Trend Log 1\",
-      :start-time \"2009-01-01T05:00:00.000Z\",
-      :log-buffer
-      [[\"2009-03-01T07:15:00.000Z\" 1009.0]
-       [\"2009-03-01T07:30:00.000Z\" 1010.0]...]...}"
-  [device-id object-identifier]
-  (let [properties (first (remote-object-properties device-id object-identifier :all))
-        record-count (:record-count properties)]
-    (merge (rp/read-range device-id object-identifier :log-buffer nil [1 record-count])
-           properties)))
 
 (defn remote-objects-all-properties
   "Return a list of maps of every objects and their properties."
-  [device-id]
-  (remote-object-properties device-id (remote-objects device-id) :all))
+  ([device-id] (remote-objects-all-properties nil device-id))
+  ([local-device-id device-id]
+   (remote-object-properties device-id (remote-objects device-id) :all)))
 
 (defn get-device-id
   "Return the device-id from a device-map (bunch of properties).
@@ -116,6 +122,22 @@
   (->> (map :object-identifier device-map)
        (filter (comp #{:device} first))
        ((comp second first))))
+
+
+;; (defn read-trend-log
+;;   "A convenience function to retrieve all data from a trend-log (even the log-buffer).
+
+;;   Example:  (read-trend-log 4589 [:trend-log 1])
+;;   -> {:object-name \"Trend Log 1\",
+;;       :start-time \"2009-01-01T05:00:00.000Z\",
+;;       :log-buffer
+;;       [[\"2009-03-01T07:15:00.000Z\" 1009.0]
+;;        [\"2009-03-01T07:30:00.000Z\" 1010.0]...]...}"
+;;   [device-id object-identifier]
+;;   (let [properties (first (remote-object-properties device-id object-identifier :all))
+;;         record-count (:record-count properties)]
+;;     (merge (rp/read-range device-id object-identifier :log-buffer nil [1 record-count])
+;;            properties)))
 
 ;; ================================================================
 ;; Filtering and querying functions

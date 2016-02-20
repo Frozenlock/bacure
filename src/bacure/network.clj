@@ -32,7 +32,8 @@
   (let [interfaces (get-interfaces)]
     (->> (for [i interfaces]
            (when-let [ips (seq (ipv4-from-interface i))]
-             {:interface (.getName i) :ips ips :broadcast-address (get-broadcast-address-of-interface i)}))
+             {:interface (.getName i) :ips ips :broadcast-address (get-broadcast-address-of-interface i)
+}))
          (remove nil?))))
         
 (defn get-any-ip
@@ -63,4 +64,30 @@
 (defn to-bytes [IP-or-url]
   (-> (InetAddress/getByName IP-or-url)
       (.getAddress)))
+
+
+;;; 
+
+;; bacnet4j transport
+
+
+(import 'com.serotonin.bacnet4j.transport.DefaultTransport)
+(import 'com.serotonin.bacnet4j.npdu.ip.IpNetwork)
+(import 'com.serotonin.bacnet4j.npdu.ip.IpNetworkBuilder)
+
+
+(defn ip-network-builder
+  "Return an IP network object."
+  [{:keys [broadcast-address local-address local-network-number port reuse-address]
+    :or {reuse-address true, local-network-number 0
+         local-address IpNetwork/DEFAULT_BIND_IP
+         port IpNetwork/DEFAULT_PORT} :as args}]
+  (-> (doto (IpNetworkBuilder.)
+        (.broadcastIp broadcast-address)
+        (.localBindAddress local-address)
+        (.localNetworkNumber (int local-network-number))
+        (.port (int port))
+        ;(.reuseAddress reuse-address)
+        )
+      (.build)))
 

@@ -1,5 +1,6 @@
 (ns bacure.coerce.type.primitive
   (:require [bacure.coerce :as c :refer [bacnet->clojure clojure->bacnet]]
+            [bacure.coerce.type.enumerated :as enum] ;; we need 'object-type' for 'object-identifier'
             [clj-time.core :as t]
             [clj-time.format :as tf]
             [clj-time.coerce]
@@ -27,7 +28,7 @@
 
 
 (defn c-boolean [bool]
-  (com.serotonin.bacnet4j.type.primitive.Boolean. bool))
+  (com.serotonin.bacnet4j.type.primitive.Boolean. (if (nil? bool) false bool)))
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.primitive.Boolean
   [^com.serotonin.bacnet4j.type.primitive.Boolean o]
@@ -84,33 +85,8 @@
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.primitive.Double
   [^com.serotonin.bacnet4j.type.primitive.Double o]
-  (Double/parseDouble (.toString o))) ;; no 'getDouble' method :-(
+  (.doubleValue o))
 
-
-;;;
-
-
-;;; ENUMERATED, but we need it for the object-identifier
-
-(def obj-int-map
-  (c/subclass-to-map com.serotonin.bacnet4j.type.enumerated.ObjectType))
-
-(defn c-object-type
-  "Type can be either the integer or the keyword"[object-type]
-  (com.serotonin.bacnet4j.type.enumerated.ObjectType.
-   (if (keyword? object-type)
-     (if-let [[_ n] (re-find #"vendor-specific-(\d+)" (name object-type))]
-       (read-string n)
-       (get obj-int-map object-type))
-     (or object-type 0))))
-
-(defmethod clojure->bacnet :object-type
-  [_ value]
-  (c-object-type value))
-
-(defmethod bacnet->clojure com.serotonin.bacnet4j.type.enumerated.ObjectType
-  [^com.serotonin.bacnet4j.type.enumerated.ObjectType o]
-  (c/object-to-keyword o))
 
 ;;;
 
@@ -155,7 +131,7 @@
 
 
 (defn c-signed [value]
-  (SignedInteger. (or value 0)))
+  (SignedInteger. (int (or value 0))))
 
 (defmethod clojure->bacnet :signed-integer
   [_ value]
@@ -192,7 +168,7 @@
 ;;;
 
 (defn c-unsigned-16 [value]
-  (Unsigned16. (or value 0)))
+  (Unsigned16. (int (or value 0))))
 
 (defmethod clojure->bacnet :unsigned-16
   [_ value]
@@ -200,14 +176,14 @@
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.primitive.Unsigned16
   [^com.serotonin.bacnet4j.type.primitive.Unsigned16 o]
-  (Integer/parseInt (.toString o)))
+  (.intValue o))
 
 
 ;;;
 
 
 (defn c-unsigned-32 [value]
-  (Unsigned32. (or value 0)))
+  (Unsigned32. (int (or value 0))))
 
 (defmethod clojure->bacnet :unsigned-32
   [_ value]
@@ -215,12 +191,12 @@
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.primitive.Unsigned32
   [^com.serotonin.bacnet4j.type.primitive.Unsigned32 o]
-  (Integer/parseInt (.toString o)))
+  (.intValue o))
 
 ;;;
 
 (defn c-unsigned-8 [value]
-  (Unsigned8. (or value 0)))
+  (Unsigned8. (int (or value 0))))
 
 (defmethod clojure->bacnet :unsigned-8
   [_ value]
@@ -228,21 +204,21 @@
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.primitive.Unsigned8
   [^com.serotonin.bacnet4j.type.primitive.Unsigned8 o]
-  (Integer/parseInt (.toString o)))
+  (.intValue o))
 
 ;;;
 
 
-(defn c-unsigned-Integer [value]
-  (UnsignedInteger. (or value 0)))
+(defn c-unsigned-integer [value]
+  (UnsignedInteger. (int (or value 0))))
 
 (defmethod clojure->bacnet :unsigned-integer
   [_ value]
-  (c-unsigned-Integer value))
+  (c-unsigned-integer value))
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.primitive.UnsignedInteger
   [^com.serotonin.bacnet4j.type.primitive.UnsignedInteger o]
-  (Integer/parseInt (.toString o)))
+  (.intValue o))
 
 ;;;
 
@@ -255,16 +231,18 @@
   [something]
   (let [try-fn (fn [coerce-fn value]
                  (try (coerce-fn value)
-                      (catch Exception e)))]
+                      (catch Exception e)))
+        try-numbers (fn [value]
+                      (if (some #{(class value)} [Long Integer])
+                        (try-fn c-unsigned-integer value)
+                        (try-fn c-real value)))]
     ;; now try to coerce, in the order of 'less likely to be a false
     ;; match'.
 
-    ;; There's probably others (like Double), but we don't have them
-    ;; implemented yet.
+    ;; We unfortunately can't differentiate between very similar types
+    ;; (double, real, etc.), so just pick one.
     (or (try-fn c-object-identifier something)
-        (try-fn c-unsigned-integer something)
-        ;;(try-fn c-signed something) ;; can't really distinguish from unsigned
-        (try-fn c-real something)
+        (try-numbers something)
         (try-fn c-time something)
         (try-fn c-date something)
         (try-fn c-boolean something)

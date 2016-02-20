@@ -1,8 +1,9 @@
 (ns bacure.read-properties
   (:refer-clojure :exclude [send])
   (:require [bacure.coerce :as c]
-            [bacure.local-device :as ld]
-            [clojure.walk :as walk]))
+            [bacure.coerce.obj :as co]
+            [bacure.coerce.service.acknowledgement]
+            [bacure.local-device :as ld]))
 
 (import (com.serotonin.bacnet4j 
           service.confirmed.ReadPropertyRequest
@@ -13,17 +14,51 @@
           util.PropertyValues
           util.PropertyReferences
           exception.AbortAPDUException
-          exception.ErrorAPDUException))
+          exception.ErrorAPDUException
+          ResponseConsumer))
 
-(def ^:dynamic *nil-on-APDU-exception*
-  "Return nil instead of throwing an exception." true)
 
-(defn send-request
-  "Send the request to the remote device"
-  [device-id request]
-  (.send @ld/local-device 
-         (.getRemoteDevice @ld/local-device device-id)
-         request))
+
+;;; bacnet4j introduced some kind of callbacks with the
+;;; request-sending mechanism. For simplicity sake, we use promises to
+;;; reconvert all this into normal synchronous operations; The
+;;; operations will block until the remote devices answer the
+;;; requests. The user can use parallel functions like `pmap' if he
+;;; wants to send multiple requests at the same time.
+
+(defn make-response-consumer [return-promise]
+  (reify ResponseConsumer
+    (success [this ackowledgement-service]
+      (deliver return-promise {:success (c/bacnet->clojure ackowledgement-service)}))
+    (fail [this ack-APDU-error]
+      (deliver return-promise (-> (.getError ack-APDU-error)
+                                  (.getError) 
+                                  (c/bacnet->clojure))))
+    (ex [this bacnet-exception]
+      (deliver return-promise nil)
+      (throw bacnet-exception))))
+
+
+(defn send-request-promise
+  "Send the request to the remote device.
+  The possible return values are :
+  
+  {:success <expected valuezs - if any>
+   :error {:error-class ..., :error-code ...}}
+
+  Will block until the remote device answers."
+  ([device-id request] (send-request-promise nil device-id request))
+  ([local-device-id device-id request]
+   (let [local-device (ld/local-device-object local-device-id)
+         return-promise (promise)
+         bacnet4j-future (if (.isInitialized local-device) 
+                           (.send local-device
+                                  (.getRemoteDevice local-device device-id) request
+                                  (make-response-consumer return-promise))
+                           (throw (Exception. "Can't send request while the device isn't initialized.")))]
+     @return-promise)))
+
+
 
 
 ;; ================================================================
@@ -36,55 +71,65 @@
   [:analog-input 0] :description
   [:analog-input 0] [:description 0] <--- with array index"
   [object-identifier property-reference]
-  (let [prop-ref (c/c-property-reference property-reference)]
+  (let [prop-ref (c/clojure->bacnet :property-reference property-reference)]
     (ReadPropertyRequest.
-     (c/c-object-identifier object-identifier)
+     (c/clojure->bacnet :object-identifier object-identifier)
      (.getPropertyIdentifier prop-ref)
      (.getPropertyArrayIndex prop-ref))))
 
 (defn read-single-property
   "Read a single property."
-  [device-id object-identifier property-reference]
+  [local-device-id device-id object-identifier property-reference]
   (->> (read-property-request object-identifier property-reference)
-       (send-request device-id)))
+       (send-request-promise local-device-id device-id)))
 
+
+
+(defn partition-array
+  "Ask the remote device what is the length of the BACnet array and
+  return as many object-property-identifiers. If object is not an
+  array (or any other error), return nil." 
+  [local-device-id device-id object-identifier property-reference]
+  (let [read-result (read-single-property local-device-id 
+                                          device-id 
+                                          object-identifier
+                                          [property-reference 0])]  ;; 0 return the array length
+    (if-let [size (:success read-result)]
+      (into []
+            (for [index (range 1 (inc size))]
+              [object-identifier [property-reference index]]))
+      (do (println (str "partitionned :" read-result))
+          nil))))
+
+(defn read-array-individually
+  "Read a BACnet array one time at the time and re-assemble the result
+  afterward." [local-device-id device-id object-identifier property-reference]
+  (mapv (partial apply (partial read-single-property local-device-id device-id))
+        (partition-array local-device-id device-id object-identifier property-reference)))
+      
 (defn size-related? [apdu-exception]
   (some #{(.getAbortReason (.getApdu apdu-exception))}
         [(.intValue AbortReason/bufferOverflow)
          (.intValue AbortReason/segmentationNotSupported)]))
 
-(defn partition-array
-  "Ask the remote device what is the length of the BACnet array and
-  return as many object-property-identifiers. If object is not an
-  array, return nil." [device-id object-identifier property-reference]
-  (try
-    (let [size (-> (read-single-property device-id object-identifier
-                                         [property-reference 0]) ;; 0 return the array length
-                   c/bacnet->clojure)]
-      (into []
-            (for [index (range 1 (inc size))]
-              [object-identifier [property-reference index]])))
-    (catch ErrorAPDUException e)))
-
-(defn read-array-individually
-  "Read a BACnet array one time at the time and re-assemble the result
-  afterward." [device-id object-identifier property-reference]
-  (mapv (partial apply (partial read-single-property device-id))
-        (partition-array device-id object-identifier property-reference)))
-      
 (defn read-single-property-with-fallback
   "Read a single property. If there's a size-related APDU error, will
   try to read the BACnet arrays one item at the time."
-  [device-id object-identifier property-reference]
-  (try (read-single-property device-id object-identifier property-reference)
-       (catch AbortAPDUException e
-         (if (size-related? e)
-           (read-array-individually device-id object-identifier property-reference)
-           (throw e)))))
+  [local-device-id device-id object-identifier property-reference]
+    
+  (try 
+    (let [read-result (read-single-property local-device-id device-id object-identifier property-reference)]
+      (cond
+        (:success read-result) read-result
+        :else read-result))
+    (catch AbortAPDUException e
+      (if (size-related? e)
+        (read-array-individually local-device-id device-id object-identifier property-reference)
+        (throw e)))))
 
   
 (defn read-individually
-  "Given a list of object-property-references, return a list of properties maps.
+  "Given a list of object-property-references, return a list of object properties maps.
 
   [[[:analog-input 0] :description]
    [[:analog-input 1] :object-name]
@@ -95,14 +140,13 @@
   ({:description \"ANALOG INPUT 0\", :object-identifier [:analog-input 0]}
    {:object-name \"ANALOG INPUT 1\", :object-identifier [:analog-input 1]}
    {[:object-list 2] [:analog-input 0], :object-identifier [:device 1234]})"
-  [device-id object-property-references]
+  [local-device-id device-id object-property-references]
   (->> (for [[oid prop-ref] object-property-references]
-         (let [result (try (read-single-property-with-fallback
-                             device-id oid prop-ref)
-                           (catch ErrorAPDUException e
-                             (when-not *nil-on-APDU-exception*
-                               (throw e))))]
-           (into {} [[prop-ref (c/bacnet->clojure result)]
+         (let [read-result (read-single-property-with-fallback
+                            local-device-id device-id oid prop-ref)]
+           (into {} [[prop-ref (if-let [result (:success read-result)]
+                                 result ;; if success, just return the result
+                                 read-result)]
                      [:object-identifier oid]])))
        (group-by :object-identifier)
        vals
@@ -113,14 +157,14 @@
 ;; ==================  And now read property multiple =============
 ;; ================================================================
 
-(defn find-max-refs [device-id]
-  (let [remote-device (.getRemoteDevice @ld/local-device device-id)]
+(defn find-max-refs [local-device-id device-id]
+  (let [remote-device (.getRemoteDevice (ld/local-device-object local-device-id) device-id)]
     (.getMaxReadMultipleReferences remote-device)))
 
 
 (defn partition-object-property-references
-  [device-id obj-prop-references]
-  (let [max-refs (find-max-refs device-id)]
+  [local-device-id device-id obj-prop-references]
+  (let [max-refs (find-max-refs local-device-id device-id)]
     (partition-all max-refs obj-prop-references)))
   
 (defn read-property-multiple-request
@@ -129,8 +173,9 @@
     [object-identifier property-references]]"
   [obj-prop-references]
   (ReadPropertyMultipleRequest.
-   (c/c-array (partial apply c/c-read-access-specification)
-              obj-prop-references)))
+   (c/clojure->bacnet :sequence-of
+                      (mapv (partial c/clojure->bacnet :read-access-specification)
+                            obj-prop-references))))
 
 (defn BACnet-array?
   "Return true if the raw data returned by a read property is part of
@@ -158,21 +203,35 @@
   "read-access-specification should be of the form:
    [[object-identifier property-references]
     [object-identifier property-references]]"
-  [device-id obj-prop-references]
-  (->> (for [refs (partition-object-property-references
-                   device-id obj-prop-references)]
-         (->> (read-property-multiple-request refs)
-              (send-request device-id)
-              (.getListOfReadAccessResults)
-              (mapcat c/bacnet->clojure)))
-       (apply concat)
-       (group-by BACnet-array?)
-       ((fn [x] (concat (assemble-arrays (get x true)) (get x false))))
-       (group-by :object-identifier)
-       vals
-       (map (partial apply merge))))
+  [local-device-id device-id obj-prop-references]
+  ;; we partition the object-property-references to be compatible with
+  ;; the remote device MaxReadMultipleReferences
+  (let [results (for [refs (partition-object-property-references
+                                local-device-id device-id obj-prop-references)]
+                      (->> (read-property-multiple-request refs)
+                           (send-request-promise local-device-id device-id)))]
+    ;; the remote device might send an error for the entire
+    ;; read-property-multiple request, even if only ONE object is
+    ;; problematic (example error: :unkown-object). This means that we
+    ;; can't know what is the cause of this error just by the request
+    ;; response.
+    
+    ;; If ANY of the partitioned requests return an error or a failure,
+    ;; just drop the entire thing. We can use higher order function to
+    ;; send request individually and pinpoint the cause.
+    (or (some #(when (not (:success %)) %) results) ;; return the first non-successful
 
-
+        ;; if we only have successful requests, merge them and wrap
+        ;; them back into a map with the :success key.
+        (->> results
+             (map :success)
+             (apply concat)
+             (group-by BACnet-array?)
+             ((fn [x] (concat (assemble-arrays (get x true)) (get x false))))
+             (group-by :object-identifier)
+             vals
+             (map (partial apply merge))
+             (hash-map :success)))))
 
 
 (defn split-opr [obj-prop-references]
@@ -182,9 +241,9 @@
 
 (defn read-array-in-chunks
   "Read the partitioned arrays in chunks and then assemble them back
-  together." [device-id partitioned-array]
+  together." [local-device-id device-id partitioned-array]
   (->> (for [opr (split-opr partitioned-array)]
-         (read-property-multiple device-id opr))
+         (read-property-multiple local-device-id device-id opr))
        (apply concat)
        (apply (fn [& results]
                 (let [oid (find (first results) :object-identifier)]
@@ -210,49 +269,6 @@
   (for [[oid oid-props] (group-by first obj-prop-refs)]
     (concat [oid] (map last oid-props))))
 
-(defn read-property-multiple
-  "read-access-specification should be of the form:
-   [[object-identifier property-references]
-    [object-identifier property-references]]
-
-   In case of an APDU size problem, will divide the request in two
-   parts. If any of those two parts have a problem, it will be split
-   again, and so on and so forth.
-
-   If the object-property-references is a single item and there's
-   still an APDU size problem, it probably means the property we are
-   trying to read is an array. It will be divided and read in chunks."
-  [device-id obj-prop-references]
-  (->> (try (read-property-multiple* device-id obj-prop-references)
-            (catch Exception e
-              (cond
-               (not *nil-on-APDU-exception*) (throw e) ;; maybe give up immediately
-               
-               (> (count obj-prop-references) 1) :obj-prop-ref-size-problem ;; too many objects?
-               
-               ((comp seq rest rest first) obj-prop-references) ;; multiple property-identifier?
-               :expand-obj-prop-ref ;;expand them before we try an array read.
-               
-               (not (coll? ((comp first next first) obj-prop-references))) ;;not already an array index
-               {:partitioned-array (apply (partial partition-array device-id)
-                                          (first obj-prop-references))})))
-       ((fn [x] (cond (= x :obj-prop-ref-size-problem)
-                      (->> (for [opr (split-opr obj-prop-references)]
-                             (read-property-multiple device-id opr))
-                           (apply concat)
-                           (remove nil?))
-                      
-                      (= x :expand-obj-prop-ref) (read-property-multiple
-                                                  device-id (expand-obj-prop-ref obj-prop-references))
-                      
-                      (map? x) [(read-array-in-chunks device-id (:partitioned-array x))]
-                      
-                      :else x)))))
-
-;; ================================================================
-;; ===========  Abstract the differences between the two ==========
-;; ================================================================
-
 (defn replace-special-identifier
   "For devices that don't support the special identifiers 
    (i.e. :all, :required and :optional), return a list of properties.
@@ -263,9 +279,72 @@
    (for [single-object-property-references object-property-references]
      (let [[object-identifier & properties] single-object-property-references
            f (fn [x] (if (#{:all :required :optional} x)
-                       (c/properties-by-option (first object-identifier) x) [x]))]
+                       (co/properties-by-option (first object-identifier) x) [x]))]
        (cons object-identifier
              (distinct (for [prop properties new-prop (f prop)] new-prop))))))
+
+(defn read-property-multiple
+  "read-access-specification should be of the form:
+   [[object-identifier property-references]
+    [object-identifier property-references]]
+
+  In case of an error (example :unknown-object), will fallback to
+  reading everything individually in order to be able to know which
+  property-reference is problematic."
+  [local-device-id device-id obj-prop-references]
+  (let [read-result (read-property-multiple* local-device-id device-id obj-prop-references)]
+    (if-let [result (:success read-result)]
+      result
+      (do 
+          (cond
+            (= (some-> read-result :error :error-class)
+               :object)
+
+            (->> obj-prop-references
+                 replace-special-identifier
+                 expand-obj-prop-ref
+                 (read-individually local-device-id device-id))
+            
+            
+            :else (do (println "Read-property-multiple error.") 
+                      read-result))
+          ;read-result
+          ;;fallback
+          ;; (do
+          ;;   (->> (cond
+                   
+          ;;          true read-result
+
+          ;;          (> (count obj-prop-references) 1) :obj-prop-ref-size-problem ;; too many objects?
+                   
+          ;;          ((comp seq rest rest first) obj-prop-references) ;; multiple property-identifier?
+          ;;          :expand-obj-prop-ref ;;expand them before we try an array read.
+                   
+          ;;          (not (coll? ((comp first next first) obj-prop-references))) ;;not already an array index
+          ;;          {:partitioned-array (apply (partial partition-array local-device-id device-id)
+          ;;                                     (first obj-prop-references))})
+          ;;        ((fn [x] (cond (= x :obj-prop-ref-size-problem)
+          ;;                       (->> (for [opr (split-opr obj-prop-references)]
+          ;;                              (read-property-multiple local-device-id device-id opr))
+          ;;                            (apply concat)
+          ;;                            (remove nil?))
+                                
+          ;;                       (= x :expand-obj-prop-ref) (read-property-multiple
+          ;;                                                   local-device-id
+          ;;                                                   device-id (expand-obj-prop-ref obj-prop-references))
+                                
+          ;;                       (map? x) [(read-array-in-chunks local-device-id device-id (:partitioned-array x))]
+                                
+          ;;                       :else x)))))
+          )
+      )))
+
+;; ================================================================
+;; ===========  Abstract the differences between the two ==========
+;; ================================================================
+
+
+
 
 
 (defn read-properties
@@ -274,31 +353,45 @@
 
    [ [[:analog-input 0] :description :object-name]   <--- multiple properties
      [[:device 1234] [:object-list 0]                <--- array access
-     [[:analog-ouput 1] :present-value]  ...]"
-  [device-id object-property-references]
-       (if (-> (.getServicesSupported (.getRemoteDevice @ld/local-device device-id))
-               c/bacnet->clojure
-               :read-property-multiple)
-         (read-property-multiple device-id object-property-references)
-              (->> object-property-references
-                   replace-special-identifier
-                   expand-obj-prop-ref
-                   (read-individually device-id))))
+     [[:analog-ouput 1] :present-value]  ...]
+
+  The result will be a collection of objects properties map.
+
+  Example:
+ 
+  ({:object-identifier [analog-input 1], :present-value 12.23}
+   {:object-identifier [analog-input 2], :present-value 24.53, object-name \"Analog Input 2\"})"
+  ([device-id object-property-references]
+   (read-properties nil device-id object-property-references))
+  ([local-device-id device-id object-property-references]
+   (if (-> (ld/local-device-object local-device-id)
+           (.getRemoteDevice device-id)
+           (.getServicesSupported)
+           c/bacnet->clojure
+           :read-property-multiple)
+     (read-property-multiple local-device-id device-id object-property-references)
+     (->> object-property-references
+          replace-special-identifier
+          expand-obj-prop-ref
+          (read-individually local-device-id device-id)))))
 
 (defn read-properties-multiple-objects
   "A convenience function to retrieve properties for multiple
-  objects." [device-id object-identifiers properties]
-  (->> (for [oid object-identifiers] (cons oid properties))
-       vector
-       (apply (partial read-properties device-id))))
+  objects."
+  ([device-id object-identifiers properties]
+   (read-properties-multiple-objects nil device-id object-identifiers properties))
+  ([local-device-id device-id object-identifiers properties]
+   (->> (for [oid object-identifiers] (cons oid properties))
+        vector
+        (apply (partial read-properties local-device-id device-id)))))
 
 
 ;; ================================================================
 ;; =====================  Read range requests  ====================
 ;; ================================================================
 
-;; I wonder if there's a way to do this only using the read-properties functions...
-;; For now we rely on the underlying bacnet4j library.
+;; ;; I wonder if there's a way to do this only using the read-properties functions...
+;; ;; For now we rely on the underlying bacnet4j library.
 
 (import (com.serotonin.bacnet4j.service.confirmed
          ReadRangeRequest
@@ -309,9 +402,12 @@
 
 (defn read-range-request-by [reference range & by-what]
   (condp = (first by-what)
-    :sequence (ReadRangeRequest$BySequenceNumber. (c/c-unsigned reference) (c/c-signed range))
-    :time (ReadRangeRequest$ByTime. (c/c-date-time (str reference)) (c/c-signed range))
-    (ReadRangeRequest$ByPosition. (c/c-unsigned reference) (c/c-signed range)))) ;;default to :position
+    :sequence (ReadRangeRequest$BySequenceNumber. (c/clojure->bacnet :unsigned-integer reference) 
+                                                  (c/clojure->bacnet :signed-integer range))
+    :time (ReadRangeRequest$ByTime. (c/clojure->bacnet :date-time reference)
+                                    (c/clojure->bacnet :signed-integer range))
+    (ReadRangeRequest$ByPosition. (c/clojure->bacnet :unsigned-integer reference) 
+                                  (c/clojure->bacnet :signed-integer range)))) ;;default to :position
 
 
 (defn read-range-request
@@ -319,18 +415,17 @@
   none is provided)."
   [object-identifier property-identifier array-index [reference range] & by-what?]
   (ReadRangeRequest.
-   (c/c-object-identifier object-identifier)
-   (c/c-property-identifier property-identifier)
-   (c/c-unsigned array-index)
+   (c/clojure->bacnet :object-identifier object-identifier)
+   (c/clojure->bacnet :property-identifier property-identifier)
+   (c/clojure->bacnet :unsigned-integer array-index)
    (read-range-request-by reference range (first by-what?))))
 
 (defn read-range 
   "'by-what?' can be :sequence, :time, or position (the default if
   none is provided)."
-  [device-id object-identifier property-identifier array-index [reference range] & by-what?]
+  [local-device-id device-id object-identifier property-identifier array-index [reference range] & by-what?]
   (->> (read-range-request object-identifier property-identifier array-index [reference range] by-what?)
-       (send-request device-id)
-       c/bacnet->clojure))
+       (send-request-promise local-device-id device-id)))
 
 
    
