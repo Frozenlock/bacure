@@ -31,9 +31,18 @@
     (success [this ackowledgement-service]
       (deliver return-promise {:success (c/bacnet->clojure ackowledgement-service)}))
     (fail [this ack-APDU-error]
-      (deliver return-promise (-> (.getError ack-APDU-error)
-                                  (.getError) 
-                                  (c/bacnet->clojure))))
+      (deliver return-promise (or (cond 
+                                    (= com.serotonin.bacnet4j.apdu.Abort (class ack-APDU-error))
+                                    {:abort (let [reason (.getAbortReason ack-APDU-error)] 
+                                              {:abort-reason (->> reason
+                                                                  (c/clojure->bacnet :abort-reason)
+                                                                  (c/bacnet->clojure))
+                                               :apdu-error ack-APDU-error})})
+                                  
+                                  :else
+                                  (some-> (.getError ack-APDU-error)
+                                          (.getError) 
+                                          (c/bacnet->clojure)))))
     (ex [this bacnet-exception]
       (deliver return-promise nil)
       (throw bacnet-exception))))
@@ -107,10 +116,11 @@
   (mapv (partial apply (partial read-single-property local-device-id device-id))
         (partition-array local-device-id device-id object-identifier property-reference)))
       
-(defn size-related? [apdu-exception]
-  (some #{(.getAbortReason (.getApdu apdu-exception))}
-        [(.intValue AbortReason/bufferOverflow)
-         (.intValue AbortReason/segmentationNotSupported)]))
+(defn size-related? 
+  "True if the abort reason is size related."
+  [abort-map]
+  (some #{(:abort-reason abort-map)}
+        [:segmentation-not-supported :buffer-overflow]))
 
 (defn read-single-property-with-fallback
   "Read a single property. If there's a size-related APDU error, will
@@ -121,11 +131,12 @@
     (let [read-result (read-single-property local-device-id device-id object-identifier property-reference)]
       (cond
         (:success read-result) read-result
-        :else read-result))
-    (catch AbortAPDUException e
-      (if (size-related? e)
-        (read-array-individually local-device-id device-id object-identifier property-reference)
-        (throw e)))))
+        
+        (:abort read-result) (if (size-related? (:abort read-result))
+                               (read-array-individually local-device-id device-id object-identifier property-reference)
+                               (throw (or (some-> read-result :abort :apdu-error)
+                                          (Exception. "APDU abort"))))
+        :else read-result))))
 
   
 (defn read-individually
@@ -295,48 +306,61 @@
   (let [read-result (read-property-multiple* local-device-id device-id obj-prop-references)]
     (if-let [result (:success read-result)]
       result
-      (do 
-          (cond
-            (= (some-> read-result :error :error-class)
-               :object)
+      (do
+        (cond
+          ;; if we get an error related to object
+          (= (some-> read-result :error :error-class)
+             :object)
 
-            (->> obj-prop-references
-                 replace-special-identifier
-                 expand-obj-prop-ref
-                 (read-individually local-device-id device-id))
-            
-            
-            :else (do (println "Read-property-multiple error.") 
-                      read-result))
-          ;read-result
-          ;;fallback
-          ;; (do
-          ;;   (->> (cond
-                   
-          ;;          true read-result
+          ;; read indiviually to pinpoint which object is
+          ;; problematic.
+          (->> obj-prop-references
+               replace-special-identifier
+               expand-obj-prop-ref
+               (read-individually local-device-id device-id))
 
-          ;;          (> (count obj-prop-references) 1) :obj-prop-ref-size-problem ;; too many objects?
-                   
-          ;;          ((comp seq rest rest first) obj-prop-references) ;; multiple property-identifier?
-          ;;          :expand-obj-prop-ref ;;expand them before we try an array read.
-                   
-          ;;          (not (coll? ((comp first next first) obj-prop-references))) ;;not already an array index
-          ;;          {:partitioned-array (apply (partial partition-array local-device-id device-id)
-          ;;                                     (first obj-prop-references))})
-          ;;        ((fn [x] (cond (= x :obj-prop-ref-size-problem)
-          ;;                       (->> (for [opr (split-opr obj-prop-references)]
-          ;;                              (read-property-multiple local-device-id device-id opr))
-          ;;                            (apply concat)
-          ;;                            (remove nil?))
-                                
-          ;;                       (= x :expand-obj-prop-ref) (read-property-multiple
-          ;;                                                   local-device-id
-          ;;                                                   device-id (expand-obj-prop-ref obj-prop-references))
-                                
-          ;;                       (map? x) [(read-array-in-chunks local-device-id device-id (:partitioned-array x))]
-                                
-          ;;                       :else x)))))
-          )
+          ;; if we receive a size related abort from the remote
+          ;; device
+          (size-related? (:abort read-result))
+          
+          ;; try to split into smaller read requests
+          (->> (for [opr (split-opr obj-prop-references)]
+                 (read-property-multiple local-device-id device-id opr))
+               (apply concat)
+               (remove nil?))
+          
+          
+          :else (do (println "Read-property-multiple error.") 
+                    read-result))
+                                        ;read-result
+        ;;fallback
+        ;; (do
+        ;;   (->> (cond
+        
+        ;;          true read-result
+
+        ;;          (> (count obj-prop-references) 1) :obj-prop-ref-size-problem ;; too many objects?
+        
+        ;;          ((comp seq rest rest first) obj-prop-references) ;; multiple property-identifier?
+        ;;          :expand-obj-prop-ref ;;expand them before we try an array read.
+        
+        ;;          (not (coll? ((comp first next first) obj-prop-references))) ;;not already an array index
+        ;;          {:partitioned-array (apply (partial partition-array local-device-id device-id)
+        ;;                                     (first obj-prop-references))})
+        ;;        ((fn [x] (cond (= x :obj-prop-ref-size-problem)
+        ;;                       (->> (for [opr (split-opr obj-prop-references)]
+        ;;                              (read-property-multiple local-device-id device-id opr))
+        ;;                            (apply concat)
+        ;;                            (remove nil?))
+        
+        ;;                       (= x :expand-obj-prop-ref) (read-property-multiple
+        ;;                                                   local-device-id
+        ;;                                                   device-id (expand-obj-prop-ref obj-prop-references))
+        
+        ;;                       (map? x) [(read-array-in-chunks local-device-id device-id (:partitioned-array x))]
+        
+        ;;                       :else x)))))
+        )
       )))
 
 ;; ================================================================

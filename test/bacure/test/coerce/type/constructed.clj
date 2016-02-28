@@ -60,6 +60,21 @@
              (bacnet->clojure))
          "2016-01-17T20:48:13.900Z")))
 
+(deftest test-event-transition-bits
+  (is (example :event-transition-bits))
+  (let [tb (assoc (example :event-transition-bits) :to-normal true)]
+    (is (= (-> (clojure->bacnet :event-transition-bits tb)
+               (bacnet->clojure))
+           tb))))
+
+
+(deftest test-limit-enable
+  (is (example :limit-enable))
+  (let [tb (assoc (example :limit-enable) :high-limit-enable true)]
+    (is (= (-> (clojure->bacnet :limit-enable tb)
+               (bacnet->clojure))
+           tb))))
+
 (deftest test-property-reference
   (is (example :property-reference))
   (is (= (-> (clojure->bacnet :property-reference :present-value)
@@ -148,6 +163,13 @@
     (is (= (-> (clojure->bacnet :status-flags sf)
                (bacnet->clojure))
            sf))))
+
+(deftest test-time-stamp
+  (is (example :time-stamp))
+  (let [date-time (bacnet->clojure (example :time-stamp))]
+    (is (= (-> (clojure->bacnet :time-stamp date-time)
+               (bacnet->clojure))
+           date-time))))
 
 (comment
   (run-tests)

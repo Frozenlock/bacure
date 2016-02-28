@@ -64,7 +64,7 @@
 
 (defn remote-object-properties-with-error
   "Query a remote device and return the properties values
-   Example: (remote-object-properties-with-nil 1234 [:analog-input 0] :all)
+   Example: (remote-object-properties-with-error 1234 [:analog-input 0] :all)
    -> {:notification-class 4194303, :event-enable .....}
 
    Both `object-identifiers' and `properties' accept either a single
@@ -189,7 +189,7 @@
 (defn- update-objects-maps
   "Return the objects-maps with the new property added."
   [device-id objects-maps property]
-  (->> (remote-object-properties-with-nil
+  (->> (remote-object-properties-with-error
          device-id (map :object-identifier objects-maps) property)
        (concat objects-maps)
        (group-by :object-identifier)

@@ -10,9 +10,7 @@
 (import '(com.serotonin.bacnet4j 
           LocalDevice
           obj.BACnetObject
-          ;npdu.Network
           npdu.ip.IpNetwork
-          ;transport.Transport
           transport.DefaultTransport))
 
 
@@ -240,55 +238,6 @@
          (initialize! id#))
        @result#)))
 
-
-;; (defn local-objects
-;;   "Return a list of local objects"
-;;   ([] (local-objects nil))
-;;   ([local-device-id]
-;;    (mapv c/bacnet->clojure
-;;          (.getLocalObjects (local-device-object local-device-id)))))
-
-;; (defn add-object
-;;   "Add a local object and return it. You should probably just use `add-or-update-object'."
-;;   ([object-map] (add-object nil object-map))
-;;   ([local-device-id object-map]
-;;    ;; We must be careful; bacnet4j now 
-;;    (let [ld-o (local-device-object local-device-id)
-;;          object-id (c/clojure->bacnet :object-identifier (:object-identifier object-map))
-;;          bacnet-object (BACnetObject. object-id)
-;;          encoded-values-map (c-obj/encode-properties-values object-map)
-;;          required-properties (c-obj/properties-by-option (c-obj/get-object-type object-map) :required)]
-;;      ;; encode the properties and add them to the bacnet object.
-;;      (doseq [[property-key encoded-value] encoded-values-map :object-identifier :object-type]
-;;        ;; print an error message letting the user know that the property might not have been implemented yet
-;;        (.writeProperty bacnet-object 
-;;                        (c/clojure->bacnet :property-identifier property-key)
-;;                        encoded-value))
-;;      (.addObject ld-o bacnet-object)
-;;      bacnet-object)))
-  
-;; (defn add-or-update-object
-;;   "Update a local object properties. Create the object it if not
-;;   already present. Will not try to modify any :object-type
-;;   or :object-identifier." [object-map]
-;;   (let [object-id (c/c-object-identifier (:object-identifier object-map))
-;;         b-obj (or (.getObject @local-device object-id) (add-object object-map))]
-;;     (doseq [prop (c/encode-properties object-map :object-identifier :object-type :priority-array)]
-;;       (.setProperty b-obj prop))
-;;     (c/bacnet->clojure b-obj)))
-
-
-;; (defn remove-object
-;;   "Remove a local object by its object identifier."
-;;   [object-map]
-;;   (.removeObject @local-device
-;;                  (c/c-object-identifier (:object-identifier object-map))))
-
-;; (defn remove-all-objects
-;;   "Remove all local object"[]
-;;   (doseq [o (local-objects)]
-;;     (remove-object o)))
-
 (defn local-device-backup
   "Get the necessary information to create a local device backup." 
   ([] (local-device-backup nil))
@@ -325,7 +274,7 @@
        (initialize! local-device-id)))))
 
 (defn clear-all!
-  "Mostly a development function; Destroy all traces of a local-device."[]
+  "Destroy all traces of a local-device."[]
   (terminate-all!)
   (reset! local-devices {}))
 

@@ -15,6 +15,8 @@
             ObjectIdentifier
             ;; OctetString ;; not needed for bacure?
             
+            Null
+
             Primitive
             Real
             SignedInteger
@@ -109,6 +111,13 @@
   [^ObjectIdentifier o]
   [(keyword (bacnet->clojure (.getObjectType o)))
    (.getInstanceNumber o)])
+
+
+;;;
+
+(defmethod bacnet->clojure Null
+  [^Null o]
+  nil)
 
 
 ;;;

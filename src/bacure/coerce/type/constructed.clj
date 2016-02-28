@@ -20,19 +20,24 @@
             DateTime
             DeviceObjectReference
             DeviceObjectPropertyReference
-
+            EventTransitionBits
             
-            PropertyReference
-            PropertyValue
+            LimitEnable
+
+           
             ObjectPropertyReference
             ObjectTypesSupported
+            PriorityValue
+            PropertyReference
+            PropertyValue
 
             ReadAccessResult
             ReadAccessResult$Result
             ReadAccessSpecification
             SequenceOf
             ServicesSupported
-            StatusFlags]
+            StatusFlags
+            TimeStamp]
            [java.util ArrayList List]))
 
 
@@ -320,6 +325,17 @@
 ;;;
 
 
+;; one way only for now
+
+(defmethod bacnet->clojure PriorityValue
+  [^PriorityValue o]
+  (c/bacnet->clojure (.getValue o)))
+
+
+;;;
+
+
+
 (defn c-device-object-reference 
   [[device-identifier object-identifier]]
   (DeviceObjectReference. (clojure->bacnet :object-identifier device-identifier)
@@ -340,6 +356,41 @@
 
 ;;;
 
+(defn c-event-transition-bits 
+  [{:keys [to-fault to-normal to-offnormal]
+    :or {to-fault false to-normal false to-offnormal false}}]
+  (EventTransitionBits. to-offnormal to-fault to-normal))
+
+(defmethod clojure->bacnet :event-transition-bits
+  [_ value]
+  (c-event-transition-bits value))
+
+(defmethod bacnet->clojure EventTransitionBits
+  [^EventTransitionBits o]
+  {:to-fault (.isToFault o)
+   :to-normal (.isToNormal o)
+   :to-offnormal (.isToOffnormal o)})
+
+
+;;;
+
+(defn c-limit-enable
+  [{:keys [high-limit-enable low-limit-enable]
+    :or {high-limit-enable false low-limit-enable false}}]
+  (LimitEnable. low-limit-enable high-limit-enable))
+
+(defmethod clojure->bacnet :limit-enable
+  [_ value]
+  (c-limit-enable value))
+
+(defmethod bacnet->clojure LimitEnable
+  [^LimitEnable o]
+  {:high-limit-enable (.isHighLimitEnable o)
+   :low-limit-enable (.isLowLimitEnable o)})
+
+
+
+;;;
 
 
 (defn c-object-property-reference [[object-identifier property-reference]]
@@ -447,8 +498,8 @@
                       bacnet->clojure)]
     (try {prop-ref
           (bacnet->clojure (.getReadResult o))}
-         (catch Exception e (do (println (str (.getMessage e) " --- " prop-ref ))
-                                {prop-ref nil})))))
+         (catch Exception e (do (println (str "Error : " (.getMessage e) " --- " prop-ref ))
+                                {prop-ref {:error {:error-message (.getMessage e)}}})))))
 
 ;;;
 
@@ -597,6 +648,26 @@
   (->> (seq (.getValue o))
        (interleave (map first object-types-supported))
        (apply hash-map)))
+
+
+
+;;;
+
+(defmethod bacnet->clojure TimeStamp
+  [^TimeStamp o]
+  (cond (.isDateTime o) (bacnet->clojure (.getDateTime o))
+        (.isTime o) (bacnet->clojure (.getTime o))
+        (.isSequenceNumber o) (bacnet->clojure (.getSequenceNumber o))
+        :else (throw (Exception. "The time-stamp isn't in a BACnet date-time format."))))
+
+(defmethod clojure->bacnet :time-stamp
+  [_ value]
+  (or (when (number? value) (TimeStamp. (clojure->bacnet :unsigned-integer value)))
+      (try (when-let [date-time (clojure->bacnet :date-time value)]
+             (TimeStamp. date-time))
+           (catch Exception e))
+      (TimeStamp. (clojure->bacnet :time value))))
+
 
 
 

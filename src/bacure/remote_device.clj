@@ -2,10 +2,7 @@
   (:require [bacure.coerce :as c]
             [bacure.coerce.obj :as obj]
             [bacure.local-device :as ld]
-            [bacure.read-properties :as rp]
-
-            ;; recurring jobs
-            [doevery.core :as d-e]))
+            [bacure.read-properties :as rp]))
 
 
 (import '(com.serotonin.bacnet4j 
@@ -95,12 +92,20 @@
 
 (defn remote-devices
   "Return the list of the current remote devices. These devices must
-  be in the local table. To scan a network, use `discover-network'."
+  be in the local table. To scan a network, use `discover-network'.
+  
+  Contrary to the underlying BACnet4J library, we don't accept remote
+  devices with the same ID as the current local device."
   ([] (remote-devices nil))
   ([local-device-id]
-   (->> (for [rd (seq (.getRemoteDevices (ld/local-device-object local-device-id)))]
-          (.getInstanceNumber rd))
-        (into #{})))) ;; into a set to force unique IDs
+   (let [ldo (ld/local-device-object local-device-id)
+         ld-id (ld/get-device-id ldo)]
+     (->> (for [rd (seq (.getRemoteDevices ldo))
+                :let [rd-id (.getInstanceNumber rd)]
+                :when (not (= rd-id ld-id))]
+            rd-id)
+          (remove nil?)
+          (into #{}))))) ;; into a set to force unique IDs
 
 (defn remote-devices-and-names
   "Return a list of vector pair with the device-id and its name.
