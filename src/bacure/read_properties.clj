@@ -60,11 +60,16 @@
   ([local-device-id device-id request]
    (let [local-device (ld/local-device-object local-device-id)
          return-promise (promise)
+         timeout (:apdu-timeout (ld/get-configs local-device-id))
          bacnet4j-future (if (.isInitialized local-device) 
                            (.send local-device
                                   (.getRemoteDevice local-device device-id) request
                                   (make-response-consumer return-promise))
                            (throw (Exception. "Can't send request while the device isn't initialized.")))]
+     ;; bacnet4j seems a little icky when dealing with timeouts...
+     ;; better handling it ourself.
+     (future (do (Thread/sleep (+ timeout 1000))
+                 (deliver return-promise {:timeout "The request timed out. The remote device might not be on the network anymore."})))
      @return-promise)))
 
 
@@ -136,6 +141,8 @@
                                (read-array-individually local-device-id device-id object-identifier property-reference)
                                (throw (or (some-> read-result :abort :apdu-error)
                                           (Exception. "APDU abort"))))
+
+        (:timeout read-result) nil
         :else read-result))))
 
   
@@ -329,6 +336,8 @@
                (apply concat)
                (remove nil?))
           
+          (:timeout read-result)
+          (println "Request timed out.")
           
           :else (do (println "Read-property-multiple error.") 
                     read-result))

@@ -196,7 +196,7 @@
 
 
 
-(defn create-remote-object
+(defn create-remote-object!
   "Send a 'create object request' to the remote device. Must be given
   at least an :object-identifier OR an :object-type. If
   an :object-identifier isn't given, the numbering of the new object
@@ -204,7 +204,7 @@
   
   Will block until we receive a response back, success or failure.
   If the request times out, an exception is thrown."
-  ([device-id object-map] (create-remote-object nil device-id object-map))
+  ([device-id object-map] (create-remote-object! nil device-id object-map))
   ([local-device-id device-id object-map]
    (let [request (CreateObjectRequest. (if-let [o-id (:object-identifier object-map)]
                                          (c/clojure->bacnet :object-identifier o-id)
@@ -213,25 +213,25 @@
                                                               :object-list))]
      (rp/send-request-promise local-device-id device-id request))))
 
-(defn delete-remote-object
+(defn delete-remote-object!
   "Send a 'delete object' request to a remote device.
   
    Will block until we receive a response back, success or failure.
   If the request times out, an exception is thrown."
-  ([device-id object-identifier] (delete-remote-object nil device-id object-identifier))
+  ([device-id object-identifier] (delete-remote-object! nil device-id object-identifier))
   ([local-device-id device-id object-identifier]
    (let [request (DeleteObjectRequest. (c/clojure->bacnet :object-identifier object-identifier))]
      (rp/send-request-promise local-device-id device-id request))))
 
 
 
-(defn set-remote-property
+(defn set-remote-property!
   "Set the given remote object property.
   
    Will block until we receive a response back, success or failure.
   If the request times out, an exception is thrown."
   ([device-id object-identifier property-identifier property-value]
-   (set-remote-property nil device-id object-identifier property-identifier property-value))
+   (set-remote-property! nil device-id object-identifier property-identifier property-value))
   ([local-device-id device-id object-identifier property-identifier property-value]
    (let [obj-type (first object-identifier)
          encoded-value (obj/encode-property-value obj-type property-identifier property-value)

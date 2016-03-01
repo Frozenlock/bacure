@@ -161,6 +161,16 @@
             [(keyword (from-camel (name (key item))))
              (val item)]))))
 
+
+(defmacro def-subclass-map [bacnet-class subclass-map]
+  `(def ~(-> (re-find #"[A-Za-z0-9]*$" (str bacnet-class))
+             (from-camel)
+             (clojure.string/lower-case)
+             (str "-map")
+             (symbol))
+     "Map of keywords and associated integer values."
+     ~subclass-map))
+
 (defmacro enumerated-converter
   "Generate the defmethods for `bacnet->clojure' and `clojure->bacnet'
   for bacnet enumerated types. 
@@ -168,31 +178,24 @@
   Also define a <class-name>-map which is a map of keywords and
   integer values."
   [bacnet-class]
-  (eval
-   `(let [subclass-map# (c/subclass-to-map ~bacnet-class)
-          inverted-subclass-map# (cset/map-invert subclass-map#)
-          conversion-key# (-> (re-find #"[A-Za-z0-9]*$" (str (quote ~bacnet-class)))
-                              (from-camel)
-                              (clojure.string/lower-case)
-                              (keyword))]
-      
-      (defmethod clojure->bacnet conversion-key#
+  `(let [subclass-map# (c/subclass-to-map ~bacnet-class)
+         inverted-subclass-map# (cset/map-invert subclass-map#)
+         conversion-key# (-> (re-find #"[A-Za-z0-9]*$" (str (quote ~bacnet-class)))
+                             (from-camel)
+                             (clojure.string/lower-case)
+                             (keyword))]
+     
+     (list (defmethod clojure->bacnet conversion-key#
              [_# key-or-number#]
              (new ~bacnet-class
                   (key-or-num-to-int subclass-map# key-or-number#)))
 
-      (defmethod bacnet->clojure ~bacnet-class
-        [value#]
-        (->> (.intValue value#)
-             (int-to-keyword* inverted-subclass-map#)))
+           (defmethod bacnet->clojure ~bacnet-class
+             [value#]
+             (->> (.intValue value#)
+                  (int-to-keyword* inverted-subclass-map#)))
 
-      `(def ~(-> (re-find #"[A-Za-z0-9]*$" (str (quote ~bacnet-class)))
-                 (from-camel)
-                 (clojure.string/lower-case)
-                 (str "-map")
-                 (symbol))
-         "Map of keywords and associated integer values."
-         ~subclass-map#))))
+           (def-subclass-map ~bacnet-class subclass-map#))))
 
 ;;================================================================
 
