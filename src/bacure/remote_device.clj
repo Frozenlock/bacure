@@ -92,18 +92,13 @@
 
 (defn remote-devices
   "Return the list of the current remote devices. These devices must
-  be in the local table. To scan a network, use `discover-network'.
-  
-  Contrary to the underlying BACnet4J library, we don't accept remote
-  devices with the same ID as the current local device."
+  be in the local table. To scan a network, use `discover-network'."
   ([] (remote-devices nil))
   ([local-device-id]
    (let [ldo (ld/local-device-object local-device-id)
          ld-id (ld/get-device-id ldo)]
-     (->> (for [rd (seq (.getRemoteDevices ldo))
-                :let [rd-id (.getInstanceNumber rd)]
-                :when (not (= rd-id ld-id))]
-            rd-id)
+     (->> (for [rd (seq (.getRemoteDevices ldo))]
+            (.getInstanceNumber rd))
           (remove nil?)
           (into #{}))))) ;; into a set to force unique IDs
 
