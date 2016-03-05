@@ -59,12 +59,12 @@
         :protocol-version (c/bacnet->clojure (.getProtocolVersion device))
         :protocol-revision (c/bacnet->clojure (.getProtocolRevision device))}))))
 
-(defn retrieve-extended-information
+(defn retrieve-extended-information!
   "Retrieve the remote device extended information (name, segmentation,
   property multiple, etc..) and update it locally.
   
   Return the cached extended information."
-  ([device-id] (retrieve-extended-information nil device-id))
+  ([device-id] (retrieve-extended-information! nil device-id))
   ([local-device-id device-id]
    (let [dev (rd local-device-id device-id)]
      ;; first step is to see if the device support read-property-multiple to enable faster read
@@ -88,7 +88,7 @@
   ([device-id] (extended-information nil device-id))
   ([local-device-id device-id]
    (or (cached-extended-information local-device-id device-id)
-       (retrieve-extended-information local-device-id device-id))))
+       (retrieve-extended-information! local-device-id device-id))))
 
 (defn remote-devices
   "Return the list of the current remote devices. These devices must

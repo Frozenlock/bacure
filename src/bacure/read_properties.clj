@@ -37,12 +37,12 @@
                                               {:abort-reason (->> reason
                                                                   (c/clojure->bacnet :abort-reason)
                                                                   (c/bacnet->clojure))
-                                               :apdu-error ack-APDU-error})})
-                                  
-                                  :else
-                                  (some-> (.getError ack-APDU-error)
-                                          (.getError) 
-                                          (c/bacnet->clojure)))))
+                                               :apdu-error ack-APDU-error})}
+                                    
+                                    :else
+                                    (some-> (.getError ack-APDU-error)
+                                            (.getError) 
+                                            (c/bacnet->clojure))))))
     (ex [this bacnet-exception]
       (deliver return-promise nil)
       (throw bacnet-exception))))
