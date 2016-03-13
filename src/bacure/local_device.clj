@@ -66,7 +66,7 @@
              [p-name (c/bacnet->clojure (.getProperty config-o p))])
            (into {})))))
 
-(defn get-device-id 
+(defn get-local-device-id 
   "Given a local device object, return the device ID."
   [device-object]
   (-> (.getConfiguration device-object)

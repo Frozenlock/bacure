@@ -95,12 +95,13 @@
   be in the local table. To scan a network, use `discover-network'."
   ([] (remote-devices nil))
   ([local-device-id]
-   (let [ldo (ld/local-device-object local-device-id)
-         ld-id (ld/get-device-id ldo)]
-     (->> (for [rd (seq (.getRemoteDevices ldo))]
-            (.getInstanceNumber rd))
-          (remove nil?)
-          (into #{}))))) ;; into a set to force unique IDs
+   (if-let [ldo (ld/local-device-object local-device-id)] 
+     (let [ld-id (ld/get-local-device-id ldo)]
+       (->> (for [rd (seq (.getRemoteDevices ldo))]
+              (.getInstanceNumber rd))
+            (remove nil?)
+            (into #{})))
+     (throw (Exception. "Missing local device"))))) ;; into a set to force unique IDs
 
 (defn remote-devices-and-names
   "Return a list of vector pair with the device-id and its name.
