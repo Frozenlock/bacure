@@ -9,6 +9,6 @@
                  [clj-time "0.9.0"]]
   :plugins [[lein-codox "0.9.5"]]
   :codox {:doc-paths ["docs"]
-          :source-uri "https://github.com/Frozenlock/bacure/blob/{version}/{filepath}#L{line}"
+          :source-uri "https://github.com/Frozenlock/bacure/blob/master/{filepath}#L{line}"
           ;; :src-linenum-anchor-prefix "L"
           })
