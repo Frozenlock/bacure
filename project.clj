@@ -7,6 +7,8 @@
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [com.serotonin/bacnet4j "3.2.4"]
                  [clj-time "0.9.0"]]
-  :plugins [[codox "0.8.6"]]
-  :codox {:src-dir-uri "https://github.com/Frozenlock/bacure/blob/master/"
-          :src-linenum-anchor-prefix "L"})
+  :plugins [[lein-codox "0.9.5"]]
+  :codox {:doc-paths ["docs"]
+          :source-uri "https://github.com/Frozenlock/bacure/blob/{version}/{filepath}#L{line}"
+          ;; :src-linenum-anchor-prefix "L"
+          })
