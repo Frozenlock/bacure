@@ -101,7 +101,9 @@ If you don't know what kind of data is expected, you can use the
 Major changes.
 
 It is expected that you will have to change a few function names if
-you are transistionning from 0.6 or below.
+you are transistionning from 0.6 or below. You can use the
+[documentation](http://frozenlock.github.io/bacure/index.html) to help
+you find the new function names.
 
 
 - Data coercion into BACnet4J objects have been redone from scratch;
