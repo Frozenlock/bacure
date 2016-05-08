@@ -18,7 +18,7 @@ for the available functions with their descriptions.
 
 ### Getting Started
 
-To get spin up a BACnet device, you can use `bacure.core/boot-up!`.
+To spin up a BACnet device, you can use `bacure.core/boot-up!`.
 This will create a new local device, bind it to a network interface
 and search for other BACnet devices.
 
