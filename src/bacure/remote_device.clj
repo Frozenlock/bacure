@@ -270,52 +270,15 @@
 ;; ;; Maintenance of the remote devices list
 ;; ;; ================================================================
 
-;; (defn is-alive? 
-;;   "Check if the remote device is still alive. This is the closest
-;;   thing to a 'ping' in the BACnet world." [device-id]
+(defn is-alive? 
+  "Check if the remote device is still alive. This is the closest
+  thing to a 'ping' in the BACnet world." 
+  ([device-id] (is-alive? nil device-id))
+  ([local-device-id device-id]
+   (try ;; try to read the :system-status property. In case of timeout,
+     ;; catch the exception and return nil.
+     (rp/read-properties local-device-id 
+                         device-id
+                         [[[:device device-id] :system-status]])
+     (catch Exception e nil))))
 
-;;   (try ;; try to read the :system-status property. In case of timeout,
-;;        ;; catch the exception and return nil.
-;;     (rp/read-properties device-id [[[:device device-id] :system-status]])
-;;        (catch Exception e nil)))
-
-;; (defn remove-remote-device
-;;   "Remove a remote device from the local device table.
-
-;;    WARNING: Uses a custom function not yet in the official bacnet4j
-;;    library." [device-id]
-;;    (.removeRemoteDevice @ld/local-device device-id))
-
-;; (defn remove-if-dead 
-;;   "Remove the remote device from the local table if it fails to answer
-;;   in a timely manner (determined by the timeout)."
-;;   [device-id]
-;;   (when-not (is-alive? device-id)
-;;     (println (str "Device " device-id " is not answering... removing from local table."))
-;;     (remove-remote-device device-id)))
-
-;; (defn clean-remote-devices-table
-;;   "Remove all the remote devices not answering our 'ping'.
-
-;;    You should probably call this function every X amount of time to
-;;    keep the local list of remote devices clean." []
-;;   (doall
-;;    (pmap remove-if-dead (remote-devices))))
-
-;; ;;;;
-
-
-;; (defn disable-automatic-rd-cleaning!
-;;   "Stop the automatic remote devices list cleaning. Useful if you have
-;;   a slow network and don't want to send non-critical packets, or if
-;;   you want to prevent a network request while you do an
-;;   operation."[]
-;;   (d-e/stop-pool))
-
-;; (defn start-automatic-rd-cleaning!
-;;   "Check if the remote devices are alive every X minutes (10 by default). If they aren't,
-;;    remove them from the remote devices list."
-;;   ([] (start-automatic-rd-cleaning! 10))
-;;   ([time]
-;;      (disable-automatic-rd-cleaning!)
-;;      (d-e/do-every (* 1000 60 time) clean-remote-devices-table "Clean remote devices table")))
