@@ -171,6 +171,13 @@
                (bacnet->clojure))
            date-time))))
 
+(deftest write-access-specification
+  (is (example :write-access-specification))
+  (let [data [[:analog-input 0] [[:present-value 10.0]]]]
+    (is (= (-> (clojure->bacnet :write-access-specification data)
+               (bacnet->clojure))
+           data))))
+
 (comment
   (run-tests)
   )

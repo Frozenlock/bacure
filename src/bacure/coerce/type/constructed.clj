@@ -37,7 +37,8 @@
             SequenceOf
             ServicesSupported
             StatusFlags
-            TimeStamp]
+            TimeStamp
+            WriteAccessSpecification]
            [java.util ArrayList List]))
 
 
@@ -667,6 +668,31 @@
              (TimeStamp. date-time))
            (catch Exception e))
       (TimeStamp. (clojure->bacnet :time value))))
+
+
+(defmethod bacnet->clojure WriteAccessSpecification
+  [^WriteAccessSpecification o]
+  [(c/bacnet->clojure (.getObjectIdentifier o))
+   (mapv c/bacnet->clojure (.getListOfProperties o))])
+
+(defmethod clojure->bacnet :write-access-specification
+  [_ value]
+  (let [[oid properties] value
+        pv-fn (fn [pv]
+                (if (vector? pv)
+                  (let [[p-id value] pv]
+                    {:property-identifier p-id
+                     :value value})
+                  pv))]
+    (WriteAccessSpecification.
+     (c/clojure->bacnet :object-identifier oid)
+     (c/clojure->bacnet :sequence-of
+                        (mapv #(c/clojure->bacnet :property-value* 
+                                                  (merge (pv-fn %)
+                                                         {:object-type (first oid)}))
+                             properties)))))
+
+
 
 
 
