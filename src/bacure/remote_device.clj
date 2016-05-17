@@ -10,6 +10,7 @@
           service.confirmed.CreateObjectRequest
           service.confirmed.DeleteObjectRequest
           service.confirmed.WritePropertyRequest
+          service.confirmed.WritePropertyMultipleRequest
           service.unconfirmed.WhoIsRequest
           exception.BACnetTimeoutException))
 
@@ -69,7 +70,8 @@
    (let [dev (rd local-device-id device-id)]
      ;; first step is to see if the device support read-property-multiple to enable faster read
      (when-let [services ;; don't do anything else if we can't get the protocol supported
-                (-> (rp/read-individually local-device-id device-id [[[:device device-id] :protocol-services-supported]])
+                (-> (rp/read-individually local-device-id device-id [[[:device device-id] 
+                                                                      :protocol-services-supported]])
                     (first)
                     (:protocol-services-supported))]
        (.setServicesSupported dev (c/clojure->bacnet :services-supported services))
@@ -204,7 +206,7 @@
   ([local-device-id device-id object-map]
    (let [request (CreateObjectRequest. (if-let [o-id (:object-identifier object-map)]
                                          (c/clojure->bacnet :object-identifier o-id)
-                                         (c/clojure->bacnet :object-type object-map))
+                                         (c/clojure->bacnet :object-type (:object-type object-map)))
                                        (obj/encode-properties object-map :object-type :object-identifier
                                                               :object-list))]
      (rp/send-request-promise local-device-id device-id request))))
@@ -224,8 +226,7 @@
 (defn set-remote-property!
   "Set the given remote object property.
   
-   Will block until we receive a response back, success or failure.
-  If the request times out, an exception is thrown."
+   Will block until we receive a response back, success or failure."
   ([device-id object-identifier property-identifier property-value]
    (set-remote-property! nil device-id object-identifier property-identifier property-value))
   ([local-device-id device-id object-identifier property-identifier property-value]
@@ -239,30 +240,42 @@
      (rp/send-request-promise local-device-id device-id request))))
 
 
-;; (defn set-remote-property
-;;   "Set the given remote object property."
-;;   ([device-id object-identifier property-identifier property-value]
-;;    (set-remote-property nil device-id object-identifier property-identifier property-value))
-;;   ([local-device-id device-id object-identifier property-identifier property-value]
-;;    (let [obj-type (first object-identifier)
-;;          encoded-value (obj/encode-property-value obj-type property-identifier property-value)
-;;          request (WritePropertyRequest. (c/clojure->bacnet :object-identifier object-identifier)
-;;                                         (c/clojure->bacnet :property-identifier property-identifier)
-;;                                         nil
-;;                                         encoded-value
-;;                                         nil)]
-;;      (println request)
-;;      (.send (ld/local-device-object local-device-id) 
-;;             (rd local-device-id device-id) request
-;;             (rp/make-responser-consumer 1 2 3))
-;;      )))
+(defn set-remote-properties!
+  "Set the given remote object properties.
+  
+  Will block until we receive a response back, success or failure.
+  
+  'write-access-specificiations' is a map of the form:
+  {[:analog-input 1] [[:present-value 10.0][:description \"short description\"]]}
 
-
-
-;(defn set-remote-properties
-;  "Set all the given objects properties in the remote device."
-
-;; todo... must make sure to use write-property-multiple if available.
+  If the remote device doesn't support 'write-property-multiple',
+  fallback to writing all properties individually."
+  ([device-id write-access-specificiations]
+   (set-remote-properties! nil device-id write-access-specificiations))
+  ([local-device-id device-id write-access-specificiations]
+   (if (-> (ld/local-device-object local-device-id)
+           (.getRemoteDevice device-id)
+           (.getServicesSupported)
+           c/bacnet->clojure
+           :write-property-multiple)
+     
+     ;; normal behavior
+     (let [req (WritePropertyMultipleRequest.
+                (c/clojure->bacnet :sequence-of
+                                   (map #(c/clojure->bacnet :write-access-specification %)
+                                        write-access-specificiations)))]
+       (rp/send-request-promise local-device-id device-id req))
+     ;; fallback to writing properties individually
+     (let [set-object-props! 
+           (fn [[obj-id props]]
+             (for [[prop-id prop-value] props]
+               (-> (set-remote-property! local-device-id device-id obj-id prop-id prop-value)
+                   (assoc :object-identifier obj-id
+                          :property-id prop-id
+                          :property-value prop-value))))]
+       (->> (mapcat set-object-props! write-access-specificiations)
+            (remove :success)
+            (#(if (seq %) {:error {:write-properties-errors (vec %)}} {:success true})))))))
 
 
 

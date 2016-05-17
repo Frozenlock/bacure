@@ -29,7 +29,7 @@
 (defn make-response-consumer [return-promise]
   (reify ResponseConsumer
     (success [this ackowledgement-service]
-      (deliver return-promise {:success (c/bacnet->clojure ackowledgement-service)}))
+      (deliver return-promise {:success (or (c/bacnet->clojure ackowledgement-service) true)}))
     (fail [this ack-APDU-error]
       (deliver return-promise (or (cond 
                                     (= com.serotonin.bacnet4j.apdu.Abort (class ack-APDU-error))
