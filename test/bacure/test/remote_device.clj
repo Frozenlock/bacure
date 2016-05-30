@@ -72,10 +72,10 @@
 
       (testing "Create/delete object"
         ;; first we delete the object to make sure it isn't there.
-        (rd/delete-remote-object ld-id rd-id [:analog-input 1])
+        (rd/delete-remote-object! ld-id rd-id [:analog-input 1])
 
         ;; then we delete once again: we should get an error.
-        (is (= (rd/delete-remote-object ld-id rd-id [:analog-input 1])
+        (is (= (rd/delete-remote-object! ld-id rd-id [:analog-input 1])
                {:error {:error-class :object :error-code :unknown-object}}))
 
         ;; create the new object
@@ -91,7 +91,7 @@
                    first
                    (get :present-value))
                10.0))
-        (rd/delete-remote-object ld-id rd-id [:analog-input 1])        
+        (rd/delete-remote-object! ld-id rd-id [:analog-input 1])        
         
         (is (= (-> (rp/read-properties ld-id rd-id [[[:analog-input 1] :present-value]])
                    (first)
@@ -122,7 +122,7 @@
 
         ;; delete all objects
         (doseq [i (range 10)]
-          (rd/delete-remote-object ld-id rd-id [:analog-input i])))
+          (rd/delete-remote-object! ld-id rd-id [:analog-input i])))
 
       
 

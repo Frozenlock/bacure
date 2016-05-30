@@ -234,9 +234,6 @@
 ;; have the object-type. The possible solutions are to pre-encode the
 ;; value, or to somehow pass the 'type' with the arguments.
 
-;; To prevent any confusion, we will not make this conversion
-;; available to the `clojure->bacnet' method.
-
 (defn c-property-value* [m]
   (let [{:keys [property-identifier property-array-index value priority]
          :or {value (clojure->bacnet :unsigned-integer nil)}} m] ;; <-- allow quick object generation with empty map

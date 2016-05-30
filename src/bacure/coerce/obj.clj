@@ -106,12 +106,12 @@
   "Encode an object map into a sequence of bacnet4j property-values.
   Remove-keys can be used to remove read-only properties before
   sending a command." [obj-map & remove-keys]
-  (let [encoded-values-map (-> (encode-properties-values obj-map) 
-                               (dissoc (first remove-keys)))
-        encoded-properties-values (map #(clojure->bacnet 
-                                         :property-value*
-                                         [(clojure->bacnet :property-identifier (key %)) (val %)])
-                                       encoded-values-map)]
+  (let [o-t (get-object-type obj-map)
+        encoded-properties-values (for [[k v] (apply dissoc obj-map remove-keys)]
+                                    (c/clojure->bacnet :property-value*
+                                                       {:property-identifier k
+                                                        :value v
+                                                        :object-type o-t}))]
     (clojure->bacnet :sequence-of encoded-properties-values)))
 
 
