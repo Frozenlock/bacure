@@ -38,7 +38,11 @@
                                                                   (c/clojure->bacnet :abort-reason)
                                                                   (c/bacnet->clojure))
                                                :apdu-error ack-APDU-error})}
-                                    
+                                    (= com.serotonin.bacnet4j.apdu.Reject (class ack-APDU-error))
+                                    {:reject (let [reason (.getRejectReason ack-APDU-error)]
+                                               {:reject-reason (c/bacnet->clojure reason)
+                                                :apdu-error ack-APDU-error
+                                                })}
                                     :else
                                     (some-> (.getError ack-APDU-error)
                                             (.getError) 
