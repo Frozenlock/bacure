@@ -57,7 +57,8 @@
   (DefaultTransport. network))
 
 (defn get-configs
-  "Return a map of the local-device configurations"[local-device-id]
+  "Return a map of the local-device configurations"
+  [local-device-id]
   (when-let [ldo (local-device-object local-device-id)]
     (let [config-o (.getConfiguration ldo)
           properties (.getProperty config-o (c/clojure->bacnet :property-identifier :property-list))]
@@ -167,10 +168,16 @@
          ld (LocalDevice. device-id tp)]
      ;; add the new local-device (and its configuration) into the
      ;; local devices table.
+
      (when (get-local-device device-id)
        (terminate! device-id))
-     (swap! local-devices assoc device-id {:bacnet4j-local-device ld
-                                           :init-configs configs})
+     (swap! local-devices assoc device-id 
+            {:bacnet4j-local-device ld
+             :init-configs (merge configs
+                                  {:device-id device-id
+                                   :broadcast-address broadcast-address
+                                   :port port
+                                   :local-address local-address})})
      (update-configs! device-id configs)
      device-id)))
 
