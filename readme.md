@@ -57,7 +57,7 @@ can find.
 
 Higher level functions will automatically convert clojure
 datastructure to the correct bacnet4j java type, so you shouldn't have
-to worry about that. However, if for some reason you need to the
+to worry about that. However, if for some reason you need to do the
 conversions manually, you can use the coercion functions as such :
 
 ```clj
@@ -95,6 +95,16 @@ If you don't know what kind of data is expected, you can use the
 
 
 ## Changelogs
+
+### 1.0.1
+Minor changes.
+
+- use forked BACnet4j version;
+- re-add the function `is-alive?`;
+- add funtion to write multiple properties;
+- handle 'rejects' error;
+- fix `encode-properties` function;
+- add function to read trendlogs.
 
 ### 1.0
 
