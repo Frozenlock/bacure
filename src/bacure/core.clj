@@ -124,20 +124,22 @@
        ((comp second first))))
 
 
-;; (defn read-trend-log
-;;   "A convenience function to retrieve all data from a trend-log (even the log-buffer).
+(defn read-trend-log
+  "A convenience function to retrieve all data from a trend-log (even the log-buffer).
 
-;;   Example:  (read-trend-log 4589 [:trend-log 1])
-;;   -> {:object-name \"Trend Log 1\",
-;;       :start-time \"2009-01-01T05:00:00.000Z\",
-;;       :log-buffer
-;;       [[\"2009-03-01T07:15:00.000Z\" 1009.0]
-;;        [\"2009-03-01T07:30:00.000Z\" 1010.0]...]...}"
-;;   [device-id object-identifier]
-;;   (let [properties (first (remote-object-properties device-id object-identifier :all))
-;;         record-count (:record-count properties)]
-;;     (merge (rp/read-range device-id object-identifier :log-buffer nil [1 record-count])
-;;            properties)))
+  Example:  (read-trend-log 4589 [:trend-log 1])
+  -> {:object-name \"Trend Log 1\",
+      :start-time \"2009-01-01T05:00:00.000Z\",
+      :log-buffer
+      [[\"2009-03-01T07:15:00.000Z\" 1009.0]
+       [\"2009-03-01T07:30:00.000Z\" 1010.0]...]...}"
+  ([device-id object-identifier] (read-trend-log nil device-id object-identifier))
+  ([local-device-id device-id object-identifier]
+   (let [properties (first (remote-object-properties device-id object-identifier :all))
+         record-count (:record-count properties)]
+     (merge (:success (rp/read-range local-device-id device-id object-identifier 
+                                     :log-buffer nil [1 record-count]))
+            properties))))
 
 ;; ================================================================
 ;; Filtering and querying functions
