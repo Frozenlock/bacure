@@ -23,7 +23,7 @@
             EventTransitionBits
             
             LimitEnable
-
+            LogRecord
            
             ObjectPropertyReference
             ObjectTypesSupported
@@ -385,6 +385,29 @@
   [^LimitEnable o]
   {:high-limit-enable (.isHighLimitEnable o)
    :low-limit-enable (.isLowLimitEnable o)})
+
+
+
+;;;
+
+(defn c-log-record
+  [{:keys [timestamp type value status-flags]
+    :or {type :real value 0}}]
+  (LogRecord. (clojure->bacnet :date-time timestamp)
+              (clojure->bacnet type value)
+              (clojure->bacnet :status-flags status-flags)))
+
+(defmethod clojure->bacnet :log-record
+  [_ value]
+  (c-log-record value))
+
+(defmethod bacnet->clojure LogRecord
+  [^LogRecord o]
+  (let [value (.getEncodable o)]
+    {:timestamp (bacnet->clojure (.getTimestamp o))
+     :status-flags (bacnet->clojure (.getStatusFlags o))
+     :type (c/class-to-keyword (class value))
+     :value (bacnet->clojure value)}))
 
 
 

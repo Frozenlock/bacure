@@ -75,6 +75,13 @@
                (bacnet->clojure))
            tb))))
 
+(deftest test-log-record
+  (is (example :log-record))
+  (let [lr (assoc (example :log-record) :value 10.0 :type :real)]
+    (is (= (-> (clojure->bacnet :log-record lr)
+               (bacnet->clojure))
+           lr))))
+
 (deftest test-property-reference
   (is (example :property-reference))
   (is (= (-> (clojure->bacnet :property-reference :present-value)
