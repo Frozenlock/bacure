@@ -85,8 +85,8 @@
   device configs. Please note that many properties CANNOT be changed
   while the device is initialized (:object-identifier for example) and
   will simply be discarded." [local-device-id properties-smap]
-  (let [valid-properties (->> (keys (dissoc (get-configs local-device-id) :object-list))
-                              (cons :description)) ;; what are the keys we should expect
+  (let [valid-properties (-> (keys (dissoc (get-configs local-device-id) :object-list))
+                             (conj :description :object-name)) ;; what are the keys we should expect
         filtered-properties (select-keys properties-smap valid-properties)]
     ;; filter out any properties we are not expecting. This allows the
     ;; user to give a map containing other values.
@@ -102,6 +102,9 @@
    :port 47808
    :model-name "Bacure"
    :vendor-identifier 697
+   :apdu-timeout 6000
+   :number-of-apdu-retries 2
+   :broadcast-address (net/get-broadcast-address (net/get-any-ip))
    :description (str "BACnet device running on the open source Bacure stack. "
                      "See https://github.com/Frozenlock/bacure for details.")
    :vendor-name "HVAC.IO"})
@@ -153,8 +156,14 @@
                                (net/get-broadcast-address (or (:local-address configs) (net/get-any-ip))))
          local-address (or (:local-address configs) IpNetwork/DEFAULT_BIND_IP)
          port (or (:port configs) IpNetwork/DEFAULT_PORT)
-         tp (->> (net/ip-network-builder (mapify broadcast-address port local-address))
-                 (default-transport))
+         tp (let [tp (-> (net/ip-network-builder (mapify broadcast-address port local-address))
+                         (default-transport)
+                         )]
+              (when-let [retries (:number-of-apdu-retries configs-map)]
+                (.setRetries tp retries))
+              (when-let [timeout (:apdu-timeout configs-map)]
+                (.setTimeout tp timeout))
+              tp)
          ld (LocalDevice. device-id tp)]
      ;; add the new local-device (and its configuration) into the
      ;; local devices table.
