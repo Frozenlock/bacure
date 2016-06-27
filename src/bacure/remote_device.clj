@@ -167,7 +167,7 @@
 
   ([local-device-id {:keys [min-range max-range dest-port] :as args}]
    (find-remote-devices local-device-id args)
-   (Thread/sleep 500) ;wait a little to insure we get the responses
+   (Thread/sleep 1000) ;wait a little to insure we get the responses
    (all-extended-information local-device-id)
    (remote-devices local-device-id)))
 
