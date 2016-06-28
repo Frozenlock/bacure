@@ -15,6 +15,7 @@
           util.PropertyReferences
           exception.AbortAPDUException
           exception.ErrorAPDUException
+          exception.ServiceTooBigException
           ResponseConsumer))
 
 
@@ -26,30 +27,36 @@
 ;;; requests. The user can use parallel functions like `pmap' if he
 ;;; wants to send multiple requests at the same time.
 
+(def aaa (atom nil))
+
 (defn make-response-consumer [return-promise]
   (reify ResponseConsumer
     (success [this ackowledgement-service]
-      (deliver return-promise {:success (or (c/bacnet->clojure ackowledgement-service) true)}))
+      (deliver return-promise {:success (do (reset! aaa ackowledgement-service)
+                                            (or (c/bacnet->clojure ackowledgement-service) true))}))
     (fail [this ack-APDU-error]
       (deliver return-promise (or (cond 
                                     (= com.serotonin.bacnet4j.apdu.Abort (class ack-APDU-error))
-                                    {:abort (let [reason (.getAbortReason ack-APDU-error)] 
+                                    {:abort (let [reason (.getAbortReason ack-APDU-error)]
+                                              (reset! aaa ack-APDU-error)
                                               {:abort-reason (->> reason
                                                                   (c/clojure->bacnet :abort-reason)
                                                                   (c/bacnet->clojure))
                                                :apdu-error ack-APDU-error})}
                                     (= com.serotonin.bacnet4j.apdu.Reject (class ack-APDU-error))
                                     {:reject (let [reason (.getRejectReason ack-APDU-error)]
+                                               (reset! aaa ack-APDU-error)
                                                {:reject-reason (c/bacnet->clojure reason)
                                                 :apdu-error ack-APDU-error
                                                 })}
                                     :else
-                                    (some-> (.getError ack-APDU-error)
-                                            (.getError) 
-                                            (c/bacnet->clojure))))))
+                                    (do
+                                      (reset! aaa ack-APDU-error)
+                                      (some-> (.getError ack-APDU-error)
+                                              (.getError) 
+                                              (c/bacnet->clojure)))))))
     (ex [this bacnet-exception]
       (deliver return-promise {:timeout {:timeout-error bacnet-exception}})
-      ;(throw bacnet-exception)
       )))
 
 
@@ -69,7 +76,7 @@
          bacnet4j-future (if (.isInitialized local-device) 
                            (.send local-device
                                   (.getRemoteDevice local-device device-id) request
-                                  (make-response-consumer return-promise))
+                                  (make-response-consumer return-promise))                           
                            (throw (Exception. "Can't send request while the device isn't initialized.")))]
      ;; bacnet4j seems a little icky when dealing with timeouts...
      ;; better handling it ourself.
@@ -259,7 +266,8 @@
 
 
 (defn split-opr [obj-prop-references]
-  (split-at (/ (count obj-prop-references) 2) obj-prop-references))
+  (let [qty (count obj-prop-references)]
+    (split-at (/ qty 2) obj-prop-references)))
 
 (declare read-property-multiple)
 
@@ -316,7 +324,8 @@
   reading everything individually in order to be able to know which
   property-reference is problematic."
   [local-device-id device-id obj-prop-references]
-  (let [read-result (read-property-multiple* local-device-id device-id obj-prop-references)]
+  (let [fallback (:fallback (meta obj-prop-references))
+        read-result (read-property-multiple* local-device-id device-id obj-prop-references)]
     (if-let [result (:success read-result)]
       result
       (do
@@ -332,15 +341,31 @@
                expand-obj-prop-ref
                (read-individually local-device-id device-id))
 
-          ;; if we receive a size related abort from the remote
-          ;; device
-          (size-related? (:abort read-result))
+          ;; size related for a single object.
+          (and
+           (size-related? (:abort read-result))
+           (= (count obj-prop-references) 1) ;; single property
+           (not (coll? ((comp first next first) obj-prop-references)))) ;;not already an array index
+          
+          (let [partitioned-array (apply (partial partition-array local-device-id device-id)
+                                         (first obj-prop-references))]
+            [(read-array-in-chunks local-device-id device-id partitioned-array)])
+          
+
+          ;; size related multiple objects
+          (and (size-related? (:abort read-result))
+               (> (count obj-prop-references) 1)) ;; too many objects
           
           ;; try to split into smaller read requests
+          ;; (still multiple properties per request)
           (->> (for [opr (split-opr obj-prop-references)]
-                 (read-property-multiple local-device-id device-id opr))
+                 (read-property-multiple local-device-id device-id
+                                         opr))
                (apply concat)
                (remove nil?))
+
+          
+          
           
           (:timeout read-result)
           (throw (or (some-> read-result :timeout :timeout-error)
@@ -348,8 +373,8 @@
           
           
           :else (do (println "Read-property-multiple error.") 
-                    read-result))
-                                        ;read-result
+                    read-result))))))
+
         ;;fallback
         ;; (do
         ;;   (->> (cond
@@ -377,8 +402,6 @@
         ;;                       (map? x) [(read-array-in-chunks local-device-id device-id (:partitioned-array x))]
         
         ;;                       :else x)))))
-        )
-      )))
 
 ;; ================================================================
 ;; ===========  Abstract the differences between the two ==========
