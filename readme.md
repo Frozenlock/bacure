@@ -96,6 +96,10 @@ If you don't know what kind of data is expected, you can use the
 
 ## Changelogs
 
+### 1.0.2 - 1.0.3
+- Fix segmentation fallback
+- Longer delay between broadcasts (initialization)
+
 ### 1.0.1
 Minor changes.
 
