@@ -136,7 +136,8 @@
 (defn size-related? 
   "True if the abort reason is size related."
   [abort-map]
-  (some #{(:abort-reason abort-map)}
+  (some #{(or (:abort-reason abort-map)
+              (:reject-reason abort-map))}
         [:segmentation-not-supported :buffer-overflow]))
 
 (defn read-single-property-with-fallback
@@ -148,12 +149,16 @@
     (let [read-result (read-single-property local-device-id device-id object-identifier property-reference)]
       (cond
         (:success read-result) read-result
-        
-        (:abort read-result) (if (size-related? (:abort read-result))
-                               (read-array-individually local-device-id device-id object-identifier property-reference)
-                               (throw (or (some-> read-result :abort :apdu-error)
-                                          (Exception. "APDU abort"))))
 
+        ;;;;;
+        (or (:abort read-result)
+            (:reject read-result)) 
+        
+        (if (size-related? (or (:abort read-result) (:reject read-result)))
+          (read-array-individually local-device-id device-id object-identifier property-reference)
+          (throw (or (some-> read-result :abort :apdu-error)
+                     (Exception. "APDU abort"))))
+        ;;;;;
         (:timeout read-result) (throw (or (some-> read-result :timeout :timeout-error)
                                           (Exception. "Timeout")))
         :else read-result))))
@@ -343,7 +348,7 @@
 
           ;; size related for a single object.
           (and
-           (size-related? (:abort read-result))
+           (size-related? (or (:abort read-result) (:reject read-result)))
            (= (count obj-prop-references) 1) ;; single property
            (not (coll? ((comp first next first) obj-prop-references)))) ;;not already an array index
           
@@ -353,7 +358,7 @@
           
 
           ;; size related multiple objects
-          (and (size-related? (:abort read-result))
+          (and (size-related? (or (:abort read-result) (:reject read-result)))
                (> (count obj-prop-references) 1)) ;; too many objects
           
           ;; try to split into smaller read requests
