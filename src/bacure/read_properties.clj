@@ -272,7 +272,9 @@
 
 (defn split-opr [obj-prop-references]
   (let [qty (count obj-prop-references)]
-    (split-at (/ qty 2) obj-prop-references)))
+    (if (> 4 qty)
+      (partition-all (Math/floor (Math/sqrt qty)) obj-prop-references)
+      (split-at (/ qty 2) obj-prop-references))))
 
 (declare read-property-multiple)
 
