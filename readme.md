@@ -96,8 +96,9 @@ If you don't know what kind of data is expected, you can use the
 
 ## Changelogs
 
-### 1.0.4
-- Add coercion for BaseError type.
+### 1.0.4 - 1.0.5
+- Add coercion for BaseError type;
+- Handle `property` error. (Example: unknown-property).
 
 ### 1.0.2 - 1.0.3
 - Fix segmentation fallback
