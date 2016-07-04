@@ -124,7 +124,7 @@
       (into []
             (for [index (range 1 (inc size))]
               [object-identifier [property-reference index]]))
-      (do (println (str "partitionned :" read-result))
+      (do (println (str "Read result : " read-result))
           nil))))
 
 (defn read-array-individually
@@ -337,9 +337,9 @@
       result
       (do
         (cond
-          ;; if we get an error related to object
-          (= (some-> read-result :error :error-class)
-             :object)
+          ;; if we get an error related to object or property
+          (when-let [err (some-> read-result :error :error-class)]
+            (some #{err} [:object :property]))
 
           ;; read indiviually to pinpoint which object is
           ;; problematic.
@@ -354,9 +354,13 @@
            (= (count obj-prop-references) 1) ;; single property
            (not (coll? ((comp first next first) obj-prop-references)))) ;;not already an array index
           
-          (let [partitioned-array (apply (partial partition-array local-device-id device-id)
-                                         (first obj-prop-references))]
-            [(read-array-in-chunks local-device-id device-id partitioned-array)])
+          (do (println "Error for : " (first obj-prop-references) 
+                       (size-related? (or (:abort read-result) (:reject read-result))))
+              (println "Try to read as an array.")
+              (let [partitioned-array (apply (partial partition-array local-device-id device-id)
+                                             (first obj-prop-references))]
+                (println "\n")
+                [(read-array-in-chunks local-device-id device-id partitioned-array)]))
           
 
           ;; size related multiple objects
