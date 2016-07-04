@@ -125,17 +125,13 @@
             (for [index (range 1 (inc size))]
               [object-identifier [property-reference index]]))
       (do (println (str "Read result : " read-result))
-          :array-error))))
+          nil))))
 
 (defn read-array-individually
   "Read a BACnet array one time at the time and re-assemble the result
   afterward." [local-device-id device-id object-identifier property-reference]
-  (let [array-result 
-        (mapv (partial apply (partial read-single-property local-device-id device-id))
-              (partition-array local-device-id device-id object-identifier property-reference))]
-    (if (= :array-error array-result)
-      nil
-      array-result)))
+  (mapv (partial apply (partial read-single-property local-device-id device-id))
+        (partition-array local-device-id device-id object-identifier property-reference)))
       
 (defn size-related? 
   "True if the abort reason is size related."
