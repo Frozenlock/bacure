@@ -2,7 +2,8 @@
   (:require [bacure.coerce :as c :refer [bacnet->clojure clojure->bacnet]]
             [bacure.coerce.type.primitive :as p]
             [bacure.coerce.type.enumerated :as e]
-            [bacure.coerce.type.constructed :as t-c])
+            [bacure.coerce.type.constructed :as t-c]
+            [bacure.coerce.type.error :as err])
   (:import [com.serotonin.bacnet4j.service.acknowledgement
             AcknowledgementService
             ReadPropertyAck
