@@ -155,7 +155,11 @@
             (:reject read-result)) 
         
         (if (size-related? (or (:abort read-result) (:reject read-result)))
-          (read-array-individually local-device-id device-id object-identifier property-reference)
+          (mapv (fn [result]
+                  (or (get result :success)
+                      (println (str "Read array error for " object-identifier " - " property-reference
+                                    "\n result : " result))))
+                (read-array-individually local-device-id device-id object-identifier property-reference))
           (throw (or (some-> read-result :abort :apdu-error)
                      (Exception. "APDU abort"))))
         ;;;;;
