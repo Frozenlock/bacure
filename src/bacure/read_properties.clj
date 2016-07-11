@@ -285,13 +285,20 @@
 (defn read-array-in-chunks
   "Read the partitioned arrays in chunks and then assemble them back
   together." [local-device-id device-id partitioned-array]
-  (->> (for [opr (split-opr partitioned-array)]
-         (read-property-multiple local-device-id device-id opr))
-       (apply concat)
-       (apply (fn [& results]
-                (let [oid (find (first results) :object-identifier)]
-                  (apply (partial merge-with concat)
-                         (map #(dissoc % :object-identifier) results)))))))
+  (let [read-result (for [opr (split-opr partitioned-array)]
+                      (read-property-multiple local-device-id device-id opr :array))
+        assemble-result (fn [results]
+                          (->> results
+                               (apply concat)
+                               (apply (fn [& results]
+                                        (let [oid (:object-identifier (first results))]
+                                          (assoc 
+                                           (apply (partial merge-with concat)
+                                                  (map #(dissoc % :object-identifier) results))
+                                           :object-identifier oid))))))]
+    (assemble-result read-result)))
+
+
 
 (defn expand-obj-prop-ref
   "Take a normal object-property-references, such as
@@ -334,89 +341,72 @@
   In case of an error (example :unknown-object), will fallback to
   reading everything individually in order to be able to know which
   property-reference is problematic."
-  [local-device-id device-id obj-prop-references]
-  (let [fallback (:fallback (meta obj-prop-references))
-        read-result (read-property-multiple* local-device-id device-id obj-prop-references)]
-    (if-let [result (:success read-result)]
-      result
-      (do
-        (cond
-          ;; if we get an error related to object or property
-          (when-let [err (some-> read-result :error :error-class)]
-            (some #{err} [:object :property]))
+  ([local-device-id device-id obj-prop-references]
+   (read-property-multiple local-device-id device-id obj-prop-references nil))
+  ([local-device-id device-id obj-prop-references array?]
+   (let [read-result (if (and (> (count obj-prop-references) 50)
+                              (not array?))
+                       {:split-opr true}
+                       (read-property-multiple* local-device-id device-id obj-prop-references))]
+     (if-let [result (:success read-result)]
+       result
+       (do
+         (cond
+           ;; if we get an error related to object or property read
+           ;; indiviually to pinpoint which object is problematic.
+           (or (when-let [err (some-> read-result :error :error-class)]
+                 (some #{err} [:object :property]))
+               ;; or if the device lied about supporting read-property-multiple
+               ;; (and (= :unrecognized-service (:reject-reason (:reject read-result)))
+               ;;      (not array?))
+               )
 
-          ;; read indiviually to pinpoint which object is
-          ;; problematic.
-          (->> obj-prop-references
-               replace-special-identifier
-               expand-obj-prop-ref
-               (read-individually local-device-id device-id))
+           (->> obj-prop-references
+                replace-special-identifier
+                expand-obj-prop-ref
+                (read-individually local-device-id device-id))
 
-          ;; size related for a single object.
-          (and
-           (size-related? (or (:abort read-result) (:reject read-result)))
-           (= (count obj-prop-references) 1) ;; single property
-           (not (coll? ((comp first next first) obj-prop-references)))) ;;not already an array index
-          
-          (do (println "Error for : " (first obj-prop-references) 
-                       (size-related? (or (:abort read-result) (:reject read-result))))
-              (println "Try to read as an array.")
-              (let [partitioned-array (apply (partial partition-array local-device-id device-id)
-                                             (first obj-prop-references))]
-                (println "\n")
-                [(read-array-in-chunks local-device-id device-id partitioned-array)]))
-          
+           ;; size related for a single object.
+           (and
+            (size-related? (or (:abort read-result) (:reject read-result)))
+            (= (count obj-prop-references) 1) ;; single property
+            (not array?)
+            ;(not (coll? ((comp first next first) obj-prop-references)))
+            ) ;;not already an array index
+           
+           (do (println "Error for : " (first obj-prop-references) 
+                        (size-related? (or (:abort read-result) (:reject read-result))))
+               (println "Try to read as an array.")
+               (reset! aaa read-result)
+               (let [partitioned-array (apply (partial partition-array local-device-id device-id)
+                                              (first obj-prop-references))]
+                                        ;(println partitioned-array)
+                 [(read-array-in-chunks local-device-id device-id partitioned-array)]))
+           
 
-          ;; size related multiple objects
-          (and (size-related? (or (:abort read-result) (:reject read-result)))
-               (> (count obj-prop-references) 1)) ;; too many objects
-          
-          ;; try to split into smaller read requests
-          ;; (still multiple properties per request)
-          (->> (for [opr (split-opr obj-prop-references)]
-                 (read-property-multiple local-device-id device-id
-                                         opr))
-               (apply concat)
-               (remove nil?))
+           ;; size related multiple objects
+           (or (:split-opr read-result)
+               (= :unrecognized-service (:reject-reason (:reject read-result)))
+               (and (size-related? (or (:abort read-result) (:reject read-result)))
+                    (> (count obj-prop-references) 1))) ;; too many objects
+           
+           ;; try to split into smaller read requests
+           ;; (still multiple properties per request)
+           (->> (for [opr (split-opr obj-prop-references)]
+                  (read-property-multiple local-device-id device-id
+                                          opr))
+                (apply concat)
+                (remove nil?))
+           
 
-          
-          
-          
-          (:timeout read-result)
-          (throw (or (some-> read-result :timeout :timeout-error)
-                                          (Exception. "Timeout")))
-          
-          
-          :else (do (println "Read-property-multiple error.") 
-                    read-result))))))
+           (:timeout read-result)
+           (throw (or (some-> read-result :timeout :timeout-error)
+                      (Exception. "Timeout")))
+           
+           
+           :else (do (println "Read-property-multiple error.") 
+                     read-result)))))))
 
-        ;;fallback
-        ;; (do
-        ;;   (->> (cond
-        
-        ;;          true read-result
-
-        ;;          (> (count obj-prop-references) 1) :obj-prop-ref-size-problem ;; too many objects?
-        
-        ;;          ((comp seq rest rest first) obj-prop-references) ;; multiple property-identifier?
-        ;;          :expand-obj-prop-ref ;;expand them before we try an array read.
-        
-        ;;          (not (coll? ((comp first next first) obj-prop-references))) ;;not already an array index
-        ;;          {:partitioned-array (apply (partial partition-array local-device-id device-id)
-        ;;                                     (first obj-prop-references))})
-        ;;        ((fn [x] (cond (= x :obj-prop-ref-size-problem)
-        ;;                       (->> (for [opr (split-opr obj-prop-references)]
-        ;;                              (read-property-multiple local-device-id device-id opr))
-        ;;                            (apply concat)
-        ;;                            (remove nil?))
-        
-        ;;                       (= x :expand-obj-prop-ref) (read-property-multiple
-        ;;                                                   local-device-id
-        ;;                                                   device-id (expand-obj-prop-ref obj-prop-references))
-        
-        ;;                       (map? x) [(read-array-in-chunks local-device-id device-id (:partitioned-array x))]
-        
-        ;;                       :else x)))))
 
 ;; ================================================================
 ;; ===========  Abstract the differences between the two ==========
