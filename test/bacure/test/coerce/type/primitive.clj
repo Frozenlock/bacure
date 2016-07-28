@@ -3,6 +3,11 @@
   (:require [bacure.coerce :refer :all]
             [bacure.coerce.type.primitive :refer :all]))
 
+(deftest test-bitstring
+  (let [e (example :bitstring)]
+    (is (= (bacnet->clojure (clojure->bacnet :bitstring e))
+           e))))
+
 (deftest test-boolean
   (is (= (bacnet->clojure (clojure->bacnet :boolean true))
          true)))

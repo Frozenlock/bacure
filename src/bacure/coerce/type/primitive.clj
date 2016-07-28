@@ -7,7 +7,7 @@
             [clj-time.local :as t-local])
   (:import [com.serotonin.bacnet4j.type.primitive
 
-            ;; BitString  ;; Not needed for bacure?
+            BitString
             ;; Boolean    ;; namespace clash... just use the full name            
             CharacterString
             Date
@@ -27,7 +27,20 @@
             UnsignedInteger
             ]))
 
+(defn c-bitstring [value]
+  (BitString. (boolean-array value)))
 
+(defmethod bacnet->clojure BitString
+  [^BitString o]
+  (-> (.getValue o)
+      (seq)
+      (vec)))
+
+(defmethod clojure->bacnet :bitstring
+  [_ value]
+  (c-bitstring (or value [false false true false])))
+
+;;;
 
 (defn c-boolean [bool]
   (com.serotonin.bacnet4j.type.primitive.Boolean. (if (nil? bool) false bool)))
