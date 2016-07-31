@@ -276,7 +276,9 @@
   [_ m]
   (let [{:keys [object-type property-identifier value]
          :or {object-type :analog-input property-identifier :present-value value 0}} m
-        encoded-value (obj/encode-property-value object-type property-identifier value)]
+        encoded-value (obj/encode-property-value object-type property-identifier 
+                                                 (if (nil? value)
+                                                   (obj/force-type value :null) value))]
     (c-property-value {:property-identifier property-identifier
                        :value encoded-value})))
 
