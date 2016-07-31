@@ -128,6 +128,10 @@
 
 ;;;
 
+(defmethod clojure->bacnet :null
+  [_ value]
+  (Null.))
+
 (defmethod bacnet->clojure Null
   [^Null o]
   nil)
