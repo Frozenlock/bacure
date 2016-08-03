@@ -227,7 +227,7 @@
   property-array-index."
   [property-value priority property-array-index]
   (if-not (and (map? property-value) (contains? property-value :value))
-    {:property-value property-value
+    {:value property-value
      :priority priority
      :property-array-index property-array-index}
     property-value))
