@@ -222,21 +222,39 @@
      (rp/send-request-promise local-device-id device-id request))))
 
 
+(defn advanced-property
+  "Take a property and wrap it inside a map with the priority and
+  property-array-index."
+  [property-value priority property-array-index]
+  (if-not (and (map? property-value) (contains? property-value :value))
+    {:property-value property-value
+     :priority priority
+     :property-array-index property-array-index}
+    property-value))
+
 
 (defn set-remote-property!
   "Set the given remote object property.
   
-   Will block until we receive a response back, success or failure."
+   Will block until we receive a response back, success or failure.
+  
+  Property-value can be the value directly OR a map resulting from
+  `advanced-property'"
   ([device-id object-identifier property-identifier property-value]
-   (set-remote-property! nil device-id object-identifier property-identifier property-value))
+   (set-remote-property! nil device-id object-identifier property-identifier property-value))  
   ([local-device-id device-id object-identifier property-identifier property-value]
    (let [obj-type (first object-identifier)
-         encoded-value (obj/encode-property-value obj-type property-identifier property-value)
+         {:keys [value priority property-array-index]} (advanced-property property-value nil nil)
+         value (if (nil? value)
+                 (obj/force-type nil :null) value)
+         encoded-value (obj/encode-property-value obj-type property-identifier value)
          request (WritePropertyRequest. (c/clojure->bacnet :object-identifier object-identifier)
                                         (c/clojure->bacnet :property-identifier property-identifier)
-                                        nil
+                                        (when property-array-index
+                                          (c/clojure->bacnet :unsigned-integer property-array-index))
                                         encoded-value
-                                        nil)]
+                                        (when priority
+                                          (c/clojure->bacnet :unsigned-integer priority)))]
      (rp/send-request-promise local-device-id device-id request))))
 
 

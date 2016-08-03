@@ -274,13 +274,14 @@
 
 (defmethod clojure->bacnet :property-value*
   [_ m]
-  (let [{:keys [object-type property-identifier value]
+  (let [{:keys [object-type property-identifier value priority]
          :or {object-type :analog-input property-identifier :present-value value 0}} m
         encoded-value (obj/encode-property-value object-type property-identifier 
                                                  (if (nil? value)
                                                    (obj/force-type value :null) value))]
     (c-property-value {:property-identifier property-identifier
-                       :value encoded-value})))
+                       :value encoded-value
+                       :priority priority})))
 
 
 ;; Another though one. Most of the time, users won't care about the
@@ -697,22 +698,25 @@
   [(c/bacnet->clojure (.getObjectIdentifier o))
    (mapv c/bacnet->clojure (.getListOfProperties o))])
 
+
 (defmethod clojure->bacnet :write-access-specification
   [_ value]
   (let [[oid properties] value
         pv-fn (fn [pv]
                 (if (vector? pv)
                   (let [[p-id value] pv]
-                    {:property-identifier p-id
-                     :value value})
+                    (if (and (map? value) (contains? value :value))
+                      (assoc value :property-identifier p-id)
+                      {:property-identifier p-id
+                       :value value}))
                   pv))]
     (WriteAccessSpecification.
      (c/clojure->bacnet :object-identifier oid)
      (c/clojure->bacnet :sequence-of
-                        (mapv #(c/clojure->bacnet :property-value* 
+                        (mapv #(c/clojure->bacnet :property-value*
                                                   (merge (pv-fn %)
                                                          {:object-type (first oid)}))
-                             properties)))))
+                              properties)))))
 
 
 
