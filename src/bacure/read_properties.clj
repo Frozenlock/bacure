@@ -333,6 +333,24 @@
        (cons object-identifier
              (distinct (for [prop properties new-prop (f prop)] new-prop))))))
 
+
+(defn is-array?
+  "Return true if the object-property-references given are in an array
+  format." [opr]
+  (if-not (coll? opr)
+    nil
+    (let [c1 (first opr)]
+      (if-not (coll? c1)
+        nil
+        (let [c2 (first opr)]
+          (if-not (coll? c2)
+            nil
+            (let [c3 (first c2)]
+              (if-not (coll? c3)
+                nil
+                (let [c4 (last c3)]
+                  (number? c4))))))))))
+
 (defn read-property-multiple
   "read-access-specification should be of the form:
    [[object-identifier property-references]
@@ -346,7 +364,7 @@
   ([local-device-id device-id obj-prop-references array?]
    (let [read-result (if (and (> (count obj-prop-references) 50)
                               (not array?))
-                       {:split-opr true}
+                       {:split-opr true} ;; above 50 OPR communication is starting to suffer.
                        (read-property-multiple* local-device-id device-id obj-prop-references))]
      (if-let [result (:success read-result)]
        result
@@ -355,11 +373,7 @@
            ;; if we get an error related to object or property read
            ;; indiviually to pinpoint which object is problematic.
            (or (when-let [err (some-> read-result :error :error-class)]
-                 (some #{err} [:object :property]))
-               ;; or if the device lied about supporting read-property-multiple
-               ;; (and (= :unrecognized-service (:reject-reason (:reject read-result)))
-               ;;      (not array?))
-               )
+                 (some #{err} [:object :property])))
 
            (->> obj-prop-references
                 replace-special-identifier
@@ -370,9 +384,9 @@
            (and
             (size-related? (or (:abort read-result) (:reject read-result)))
             (= (count obj-prop-references) 1) ;; single property
+            ;;not already an array index
             (not array?)
-            ;(not (coll? ((comp first next first) obj-prop-references)))
-            ) ;;not already an array index
+            (not (is-array? obj-prop-references)))
            
            (do (println "Error for : " (first obj-prop-references) 
                         (size-related? (or (:abort read-result) (:reject read-result))))
