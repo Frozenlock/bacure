@@ -334,22 +334,21 @@
              (distinct (for [prop properties new-prop (f prop)] new-prop))))))
 
 
+(defn when-coll 
+  "Apply function 'f' to coll only if it really is a collection.
+   Return nil otherwise."
+  [coll f]
+  (when (coll? coll)
+    (f coll)))
+
 (defn is-array?
   "Return true if the object-property-references given are in an array
   format." [opr]
-  (if-not (coll? opr)
-    nil
-    (let [c1 (first opr)]
-      (if-not (coll? c1)
-        nil
-        (let [c2 (first opr)]
-          (if-not (coll? c2)
-            nil
-            (let [c3 (first c2)]
-              (if-not (coll? c3)
-                nil
-                (let [c4 (last c3)]
-                  (number? c4))))))))))
+  (some-> opr
+          (when-coll first) ;; should only be 1 item
+          (when-coll last) ;; get the property identifier
+          (when-coll last) ;; if a collection, then this should be an array
+          number?)) ;; validate that this is an array index
 
 (defn read-property-multiple
   "read-access-specification should be of the form:
