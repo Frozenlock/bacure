@@ -111,27 +111,31 @@
 
 
 
-(defn partition-array
+(defn expand-array
   "Ask the remote device what is the length of the BACnet array and
   return as many object-property-identifiers. If object is not an
-  array (or any other error), return nil." 
-  [local-device-id device-id object-identifier property-reference]
-  (let [read-result (read-single-property local-device-id 
-                                          device-id 
-                                          object-identifier
-                                          [property-reference 0])]  ;; 0 return the array length
-    (if-let [size (:success read-result)]
-      (into []
-            (for [index (range 1 (inc size))]
-              [object-identifier [property-reference index]]))
-      (do (println (str "Read result : " read-result))
-          nil))))
+  array (or any other error), return nil.
+  
+  An array length can be provided to avoid a request to a remote device."   
+  ([local-device-id device-id object-identifier property-reference]
+      (let [read-result (read-single-property local-device-id 
+                                              device-id 
+                                              object-identifier
+                                              [property-reference 0])]
+        (if-let [size (:success read-result)]
+          (expand-array local-device-id device-id object-identifier property-reference size)
+          (do (println (str "Couldn't retrieve array length : " read-result))
+              nil))))
+  ([local-device-id device-id object-identifier property-reference size]
+   (into []
+         (for [index (range 1 (inc size))]
+           [object-identifier [property-reference index]]))))
 
 (defn read-array-individually
   "Read a BACnet array one time at the time and re-assemble the result
   afterward." [local-device-id device-id object-identifier property-reference]
   (mapv (partial apply (partial read-single-property local-device-id device-id))
-        (partition-array local-device-id device-id object-identifier property-reference)))
+        (expand-array local-device-id device-id object-identifier property-reference)))
       
 (defn size-related? 
   "True if the abort reason is size related."
@@ -286,7 +290,7 @@
   "Read the partitioned arrays in chunks and then assemble them back
   together." [local-device-id device-id partitioned-array]
   (let [read-result (for [opr (split-opr partitioned-array)]
-                      (read-property-multiple local-device-id device-id opr :array))
+                      (read-property-multiple local-device-id device-id opr))
         assemble-result (fn [results]
                           (->> results
                                (apply concat)
@@ -333,7 +337,6 @@
        (cons object-identifier
              (distinct (for [prop properties new-prop (f prop)] new-prop))))))
 
-
 (defn when-coll 
   "Apply function 'f' to coll only if it really is a collection.
    Return nil otherwise."
@@ -341,14 +344,17 @@
   (when (coll? coll)
     (f coll)))
 
-(defn is-array?
-  "Return true if the object-property-references given are in an array
-  format." [opr]
-  (some-> opr
-          (when-coll first) ;; should only be 1 item
-          (when-coll last) ;; get the property identifier
-          (when-coll last) ;; if a collection, then this should be an array
-          number?)) ;; validate that this is an array index
+(defn is-expanded-array?
+  "Return true if the object-property-references is an expanded array
+   Example : 
+   [[[:device 123] [:object-list 1]]
+    [[:device 123] [:object-list 2]]]" 
+  [opr]
+  (every? #(some-> %
+                   (when-coll last)
+                   (when-coll last)
+                   number?)
+          opr))
 
 (defn read-property-multiple
   "read-access-specification should be of the form:
@@ -358,67 +364,72 @@
   In case of an error (example :unknown-object), will fallback to
   reading everything individually in order to be able to know which
   property-reference is problematic."
-  ([local-device-id device-id obj-prop-references]
-   (read-property-multiple local-device-id device-id obj-prop-references nil))
-  ([local-device-id device-id obj-prop-references array?]
-   (let [read-result (if (and (> (count obj-prop-references) 50)
-                              (not array?))
-                       {:split-opr true} ;; above 50 OPR communication is starting to suffer.
-                       (read-property-multiple* local-device-id device-id obj-prop-references))]
-     (if-let [result (:success read-result)]
-       result
-       (do
-         (cond
-           ;; if we get an error related to object or property read
-           ;; indiviually to pinpoint which object is problematic.
-           (or (when-let [err (some-> read-result :error :error-class)]
-                 (some #{err} [:object :property])))
+  [local-device-id device-id obj-prop-references]
+  (let [array? (is-expanded-array? obj-prop-references)
+        read-result (if (and (> (count obj-prop-references) 50)
+                             (not array?))
+                      {:split-opr true} ;; above 50 OPR communication is starting to suffer.
+                      (read-property-multiple* local-device-id device-id obj-prop-references))]
+    (if-let [result (:success read-result)]
+      result
+      (do
+        (cond
+          ;; if we get an error related to object or property read
+          ;; indiviually to pinpoint which object is problematic.
+          (or (when-let [err (some-> read-result :error :error-class)]
+                (some #{err} [:object :property])))
 
-           (->> obj-prop-references
-                replace-special-identifier
-                expand-obj-prop-ref
-                (read-individually local-device-id device-id))
+          (->> obj-prop-references
+               replace-special-identifier
+               expand-obj-prop-ref
+               (read-individually local-device-id device-id))
+          
 
-           ;; size related for a single object.
-           (and
-            (size-related? (or (:abort read-result) (:reject read-result)))
-            (= (count obj-prop-references) 1) ;; single property
-            ;;not already an array index
-            (not array?)
-            (not (is-array? obj-prop-references)))
-           
-           (do (println "Error for : " (first obj-prop-references) 
-                        (size-related? (or (:abort read-result) (:reject read-result))))
-               (println "Try to read as an array.")
-               (reset! aaa read-result)
-               (let [partitioned-array (apply (partial partition-array local-device-id device-id)
-                                              (first obj-prop-references))]
-                                        ;(println partitioned-array)
-                 [(read-array-in-chunks local-device-id device-id partitioned-array)]))
-           
+          ;; size related for a single object.
+          (and
+           (size-related? (or (:abort read-result) (:reject read-result)))
+           (= (count obj-prop-references) 1) ;; single property
+           (not array?)) ;; not an array index
+          
+          (do (println "Error for : " (first obj-prop-references) 
+                       (size-related? (or (:abort read-result) (:reject read-result))))
+              (println "Try to read as an array.")
+              (reset! aaa read-result)
+              (let [expanded-array (apply (partial expand-array local-device-id device-id)
+                                          (first obj-prop-references))]
+                [(read-array-in-chunks local-device-id device-id expanded-array)]))
+          
 
-           ;; size related multiple objects
-           (or (:split-opr read-result)
-               (= :unrecognized-service (:reject-reason (:reject read-result)))
-               (and (size-related? (or (:abort read-result) (:reject read-result)))
-                    (> (count obj-prop-references) 1))) ;; too many objects
-           
-           ;; try to split into smaller read requests
-           ;; (still multiple properties per request)
-           (->> (for [opr (split-opr obj-prop-references)]
-                  (read-property-multiple local-device-id device-id
-                                          opr))
-                (apply concat)
-                (remove nil?))
-           
+          ;; size related multiple objects or multiple properties
+          (or (:split-opr read-result)
+              (= :unrecognized-service (:reject-reason (:reject read-result)))
+              (and (size-related? (or (:abort read-result) (:reject read-result)))
+                   (or (> (count obj-prop-references) 1) ;; too many objects
+                       (> (count (first obj-prop-references)) 2)))) ;; too many properties
+          
+          ;; try to split into smaller read requests
+          ;; (still multiple properties per request)
+          (let [expand? (and (not (:split-opr read-result))
+                             (= (count obj-prop-references) 1)
+                             (> (count (first obj-prop-references)) 2))]
+            ;; we should expand if we have a single object but too
+            ;; many properties.
+            (->> (for [opr (split-opr (if expand? 
+                                        (expand-obj-prop-ref obj-prop-references) 
+                                        obj-prop-references))]
+                   (read-property-multiple local-device-id device-id opr))
+                 (apply concat)
+                 (remove nil?)))
 
-           (:timeout read-result)
-           (throw (or (some-> read-result :timeout :timeout-error)
-                      (Exception. "Timeout")))
-           
-           
-           :else (do (println "Read-property-multiple error.") 
-                     read-result)))))))
+
+          (:timeout read-result)
+          (throw (or (some-> read-result :timeout :timeout-error)
+                     (Exception. "Timeout")))
+          
+          
+          :else (do (println "Read-property-multiple error.")
+                    (println obj-prop-references)
+                    read-result))))))
 
 
 ;; ================================================================
@@ -446,6 +457,7 @@
   ([device-id object-property-references]
    (read-properties nil device-id object-property-references))
   ([local-device-id device-id object-property-references]
+   object-property-references
    (if (-> (ld/local-device-object local-device-id)
            (.getRemoteDevice device-id)
            (.getServicesSupported)
