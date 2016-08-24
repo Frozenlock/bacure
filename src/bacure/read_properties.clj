@@ -171,7 +171,29 @@
                                           (Exception. "Timeout")))
         :else read-result))))
 
-  
+(defn BACnet-array?
+  "Return true if the raw data returned by a read property is part of
+  an array."[data]
+  (->> (dissoc data :object-identifier) keys first coll?))
+
+(defn assemble-arrays
+  "Reassemble arrays from data returned from a
+  read-property-multiple." [data]
+  (let [sort-fn (fn [x] (sort-by #(first (keys (dissoc % :object-identifier))) x))
+        grouped-by-properties
+        (group-by (juxt :object-identifier
+                        (comp ffirst keys #(dissoc % :object-identifier))) data)]
+    ;; group-by --> [[:device 1234] :object-list] --> [<object-identifier> <property-type>]
+    (for [values grouped-by-properties]
+      (let [object-identifier (ffirst values)
+            property-type (second (first values))]
+        (->> (second values)
+             (map #(first (vals (dissoc % :object-identifier))))
+             ((fn [x] (if (> (count x) 1) x (first x))))
+             ((fn [x] {:object-identifier object-identifier
+                       property-type x})))))))
+
+
 (defn read-individually
   "Given a list of object-property-references, return a list of object properties maps.
 
@@ -192,6 +214,8 @@
                                  result ;; if success, just return the result
                                  read-result)]
                      [:object-identifier oid]])))
+       (group-by BACnet-array?)
+       ((fn [x] (concat (assemble-arrays (get x true)) (get x false))))
        (group-by :object-identifier)
        vals
        (map (partial apply merge))))
@@ -221,27 +245,6 @@
                       (mapv (partial c/clojure->bacnet :read-access-specification)
                             obj-prop-references))))
 
-(defn BACnet-array?
-  "Return true if the raw data returned by a read property is part of
-  an array."[data]
-  (->> (dissoc data :object-identifier) keys first coll?))
-
-(defn assemble-arrays
-  "Reassemble arrays from data returned from a
-  read-property-multiple." [data]
-  (let [sort-fn (fn [x] (sort-by #(first (keys (dissoc % :object-identifier))) x))
-        grouped-by-properties
-        (group-by (juxt :object-identifier
-                        (comp ffirst keys #(dissoc % :object-identifier))) data)]
-    ;; group-by --> [[:device 1234] :object-list] --> [<object-identifier> <property-type>]
-    (for [values grouped-by-properties]
-      (let [object-identifier (ffirst values)
-            property-type (second (first values))]
-        (->> (second values)
-             (map #(first (vals (dissoc % :object-identifier))))
-             ((fn [x] (if (> (count x) 1) x (first x))))
-             ((fn [x] {:object-identifier object-identifier
-                       property-type x})))))))
 
 (defn read-property-multiple*
   "read-access-specification should be of the form:
@@ -286,21 +289,42 @@
 
 (declare read-property-multiple)
 
+
+(defn assemble-results 
+  "For each object-identifier, check if a property is present is
+  present more than once. If it is, we are most probably dealing with
+  a segmented array... just concat them together."
+  [results]
+  (->> results
+       (apply concat)
+       (remove nil?)
+       (group-by :object-identifier)
+       (map (fn [[oid results]]
+              (assoc
+               (apply (partial merge-with concat)
+                      (map #(dissoc % :object-identifier) results))
+               :object-identifier oid)))))
+
+
+;; (defn assemble-results [results]
+;;   (println "assembling results...")
+;;   (def zzz results)
+;;   (->> results
+;;        (apply concat)
+;;        (remove nil?)
+;;        (apply (fn [& results]
+;;                 (let [oid (:object-identifier (first results))]
+;;                   (assoc 
+;;                    (apply (partial merge-with concat)
+;;                           (map #(dissoc % :object-identifier) results))
+;;                    :object-identifier oid))))))
+
 (defn read-array-in-chunks
   "Read the partitioned arrays in chunks and then assemble them back
   together." [local-device-id device-id partitioned-array]
   (let [read-result (for [opr (split-opr partitioned-array)]
-                      (read-property-multiple local-device-id device-id opr))
-        assemble-result (fn [results]
-                          (->> results
-                               (apply concat)
-                               (apply (fn [& results]
-                                        (let [oid (:object-identifier (first results))]
-                                          (assoc 
-                                           (apply (partial merge-with concat)
-                                                  (map #(dissoc % :object-identifier) results))
-                                           :object-identifier oid))))))]
-    (assemble-result read-result)))
+                      (read-property-multiple local-device-id device-id opr))]
+    (assemble-results read-result)))
 
 
 
@@ -344,17 +368,23 @@
   (when (coll? coll)
     (f coll)))
 
+
+;; NOTE: Does not differentiate with a single device-id followed by an array.
+;; [[[:device 123] [:object-list 1] [:object-list 2] ...]]
+;; Might be wise to correct that.
 (defn is-expanded-array?
   "Return true if the object-property-references is an expanded array
    Example : 
    [[[:device 123] [:object-list 1]]
     [[:device 123] [:object-list 2]]]" 
   [opr]
-  (every? #(some-> %
-                   (when-coll last)
-                   (when-coll last)
-                   number?)
-          opr))
+  (let [properties (map #(some-> %
+                                (when-coll last)
+                                (when-coll first)) opr)
+        obj-id (map #(some-> % (when-coll first)) opr)]
+    (and (apply = properties) ;; same property
+         (apply = obj-id) ;; same object
+         (every? identity properties))))
 
 (defn read-property-multiple
   "read-access-specification should be of the form:
@@ -365,9 +395,9 @@
   reading everything individually in order to be able to know which
   property-reference is problematic."
   [local-device-id device-id obj-prop-references]
-  (let [array? (is-expanded-array? obj-prop-references)
+  (let [expanded-array? (is-expanded-array? obj-prop-references)
         read-result (if (and (> (count obj-prop-references) 50)
-                             (not array?))
+                             (not expanded-array?))
                       {:split-opr true} ;; above 50 OPR communication is starting to suffer.
                       (read-property-multiple* local-device-id device-id obj-prop-references))]
     (if-let [result (:success read-result)]
@@ -389,15 +419,15 @@
           (and
            (size-related? (or (:abort read-result) (:reject read-result)))
            (= (count obj-prop-references) 1) ;; single property
-           (not array?)) ;; not an array index
+           (not expanded-array?)) ;; not an array index
           
-          (do (println "Error for : " (first obj-prop-references) 
+          (do (println "Error for : " (first obj-prop-references)
                        (size-related? (or (:abort read-result) (:reject read-result))))
-              (println "Try to read as an array.")
+              (println "Trying to read as an array (in chunks).")
               (reset! aaa read-result)
               (let [expanded-array (apply (partial expand-array local-device-id device-id)
                                           (first obj-prop-references))]
-                [(read-array-in-chunks local-device-id device-id expanded-array)]))
+                (read-array-in-chunks local-device-id device-id expanded-array)))
           
 
           ;; size related multiple objects or multiple properties
@@ -418,8 +448,7 @@
                                         (expand-obj-prop-ref obj-prop-references) 
                                         obj-prop-references))]
                    (read-property-multiple local-device-id device-id opr))
-                 (apply concat)
-                 (remove nil?)))
+                 assemble-results))
 
 
           (:timeout read-result)
@@ -458,11 +487,11 @@
    (read-properties nil device-id object-property-references))
   ([local-device-id device-id object-property-references]
    object-property-references
-   (if (-> (ld/local-device-object local-device-id)
-           (.getRemoteDevice device-id)
-           (.getServicesSupported)
-           c/bacnet->clojure
-           :read-property-multiple)
+   (if nil;; (-> (ld/local-device-object local-device-id)
+       ;;     (.getRemoteDevice device-id)
+       ;;     (.getServicesSupported)
+       ;;     c/bacnet->clojure
+       ;;     :read-property-multiple)
      (read-property-multiple local-device-id device-id object-property-references)
      (->> object-property-references
           replace-special-identifier
