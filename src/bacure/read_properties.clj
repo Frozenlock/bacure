@@ -487,11 +487,11 @@
    (read-properties nil device-id object-property-references))
   ([local-device-id device-id object-property-references]
    object-property-references
-   (if nil;; (-> (ld/local-device-object local-device-id)
-       ;;     (.getRemoteDevice device-id)
-       ;;     (.getServicesSupported)
-       ;;     c/bacnet->clojure
-       ;;     :read-property-multiple)
+   (if (-> (ld/local-device-object local-device-id)
+           (.getRemoteDevice device-id)
+           (.getServicesSupported)
+           c/bacnet->clojure
+           :read-property-multiple)
      (read-property-multiple local-device-id device-id object-property-references)
      (->> object-property-references
           replace-special-identifier
