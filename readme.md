@@ -96,6 +96,9 @@ If you don't know what kind of data is expected, you can use the
 
 ## Changelogs
 
+### 1.0.6
+- Better communication with slow networks and/or large requests.
+
 ### 1.0.4 - 1.0.5
 - Add coercion for BaseError type;
 - Handle `property` error. (Example: unknown-property).

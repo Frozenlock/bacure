@@ -9,4 +9,4 @@
 
 (defmethod bacnet->clojure BaseError
   [^BaseError o]
-  (.getError o))
+  (c/bacnet->clojure (.getError o)))
