@@ -54,6 +54,15 @@
                (bacnet->clojure))
            al))))
 
+
+(deftest test-daily-schedule
+  (is (example :daily-schedule))
+  (let [daily-schedule (bacnet->clojure (example :daily-schedule))]
+    (is (= (-> (clojure->bacnet :daily-schedule daily-schedule)
+               (bacnet->clojure))
+           daily-schedule))))
+
+
 (deftest test-date-time
   (is (example :date-time))
   (is (= (-> (clojure->bacnet :date-time "2016-01-17T20:48:13.900Z")
@@ -184,17 +193,17 @@
 
 (deftest test-time-value
   (is (example :time-value))
-  (let [date-time (bacnet->clojure (example :time-value))]
-    (is (= (-> (clojure->bacnet :time-value date-time)
+  (let [time-value (bacnet->clojure (example :time-value))]
+    (is (= (-> (clojure->bacnet :time-value time-value)
                (bacnet->clojure))
-           date-time))))
+           time-value))))
 
 (deftest test-time-stamp
   (is (example :time-stamp))
-  (let [date-time (bacnet->clojure (example :time-stamp))]
-    (is (= (-> (clojure->bacnet :time-stamp date-time)
+  (let [timestamp (bacnet->clojure (example :time-stamp))]
+    (is (= (-> (clojure->bacnet :time-stamp timestamp)
                (bacnet->clojure))
-           date-time))))
+           timestamp))))
 
 (deftest write-access-specification
   (is (example :write-access-specification))

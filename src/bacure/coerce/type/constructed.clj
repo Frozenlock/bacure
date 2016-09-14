@@ -175,11 +175,19 @@
 
 ;;; 
 
-(defn c-daily-schedule [])
+(defn c-daily-schedule [value]
+  (DailySchedule.
+   (clojure->bacnet :sequence-of
+                    (map #(clojure->bacnet :time-value %) value))))
 
 (defmethod clojure->bacnet :daily-schedule
   [_ value]
-  (c-daily-schedule value))
+  (c-daily-schedule 
+   (or value [{:time "17:35:1.224" :value 10.2}])))
+
+(defmethod bacnet->clojure DailySchedule
+  [^DailySchedule o]
+  (bacnet->clojure (.getDaySchedule o)))
 
 
 ;;;
