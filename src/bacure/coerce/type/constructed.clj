@@ -17,6 +17,7 @@
             ActionList
             BACnetError
             Choice
+            DailySchedule
             DateTime
             DeviceObjectReference
             DeviceObjectPropertyReference
@@ -36,8 +37,10 @@
             ReadAccessSpecification
             SequenceOf
             ServicesSupported
+            SetpointReference
             StatusFlags
             TimeStamp
+            TimeValue
             WriteAccessSpecification]
            [java.util ArrayList List]))
 
@@ -73,8 +76,9 @@
    :location (bacnet->clojure (.getLocation o))
    :enable (bacnet->clojure (.getEnable o))})
 
-
 ;;;
+
+
 
 (c/enumerated-converter AccumulatorRecord$AccumulatorStatus)
 
@@ -168,6 +172,15 @@
 (defmethod bacnet->clojure Choice
   [^Choice o]
   (bacnet->clojure (.getDatum o)))
+
+;;; 
+
+(defn c-daily-schedule [])
+
+(defmethod clojure->bacnet :daily-schedule
+  [_ value]
+  (c-daily-schedule value))
+
 
 ;;;
 
@@ -609,6 +622,22 @@
        (interleave (map first services-supported))
        (apply hash-map)))
 
+
+;;;
+
+(defn c-setpoint-reference [object-property-reference]
+  (SetpointReference. 
+   (clojure->bacnet :object-property-reference object-property-reference)))
+
+(defmethod clojure->bacnet :setpoint-reference
+  [_ value]
+  (c-setpoint-reference value))
+
+(defmethod bacnet->clojure SetpointReference
+  [^SetpointReference o]
+  (bacnet->clojure (.getSetpointReference o)))
+
+
 ;;;
 
 (defn c-status-flags [{:keys[in-alarm fault overridden out-of-service]
@@ -674,6 +703,21 @@
        (apply hash-map)))
 
 
+;;;
+
+(defn c-time-value [value]
+  (let [{:keys [time value]} value]
+    (TimeValue. (clojure->bacnet :time time)
+                (p/c-primitive value))))
+
+(defmethod clojure->bacnet :time-value
+  [_ value]
+  (c-time-value value))
+
+(defmethod bacnet->clojure TimeValue
+  [^TimeValue o]
+  {:time (bacnet->clojure (.getTime o)) 
+   :value (bacnet->clojure (.getValue o))})
 
 ;;;
 

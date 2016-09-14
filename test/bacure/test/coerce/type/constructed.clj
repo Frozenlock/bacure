@@ -164,12 +164,30 @@
                (bacnet->clojure))
            ss))))
 
+
+
+(deftest test-setpoint-reference
+  (is (example :setpoint-reference))
+  (is (= (-> (clojure->bacnet :setpoint-reference [[:analog-input 0] :acked-transitions])
+             (bacnet->clojure))
+         [[:analog-input 0] :acked-transitions]))
+  (is (= (-> (clojure->bacnet :setpoint-reference [[:analog-input 0] [:present-value 2]])
+             (bacnet->clojure))
+         [[:analog-input 0] [:present-value 2]])))
+
 (deftest test-status-flags
   (is (example :status-flags))
   (let [sf (assoc (example :status-flags) :in-alarm true)]
     (is (= (-> (clojure->bacnet :status-flags sf)
                (bacnet->clojure))
            sf))))
+
+(deftest test-time-value
+  (is (example :time-value))
+  (let [date-time (bacnet->clojure (example :time-value))]
+    (is (= (-> (clojure->bacnet :time-value date-time)
+               (bacnet->clojure))
+           date-time))))
 
 (deftest test-time-stamp
   (is (example :time-stamp))
