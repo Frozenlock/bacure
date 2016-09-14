@@ -474,7 +474,7 @@
    Format for object-property-references should be:
 
    [ [[:analog-input 0] :description :object-name]   <--- multiple properties
-     [[:device 1234] [:object-list 0]                <--- array access
+     [[:device 1234] [:object-list 0]]                <--- array access
      [[:analog-ouput 1] :present-value]  ...]
 
   The result will be a collection of objects properties map.
