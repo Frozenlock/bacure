@@ -396,6 +396,11 @@
   property-reference is problematic."
   [local-device-id device-id obj-prop-references]
   (let [expanded-array? (is-expanded-array? obj-prop-references)
+        ;; some device propose segment windows that are far too small
+        ;; for the expected payload, causing an error in BACnet4J.
+        ;; "BACnetException Segment did not fit in segment window"
+        ;; Until this is fixed, we try to manually split our requests
+        ;; at 50
         read-result (if (and (> (count obj-prop-references) 50)
                              (not expanded-array?))
                       {:split-opr true} ;; above 50 OPR communication is starting to suffer.
