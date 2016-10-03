@@ -96,6 +96,10 @@ If you don't know what kind of data is expected, you can use the
 
 ## Changelogs
 
+### 1.0.8
+- Bugfix in underlying BACnet4J library : endless loop on segmented
+  communication error.
+
 ### 1.0.6
 - Better communication with slow networks and/or large requests.
 
