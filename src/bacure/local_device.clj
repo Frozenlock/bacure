@@ -61,10 +61,17 @@
   [local-device-id]
   (when-let [ldo (local-device-object local-device-id)]
     (let [config-o (.getConfiguration ldo)
-          properties (.getProperty config-o (c/clojure->bacnet :property-identifier :property-list))]
+          properties (.getProperty config-o (c/clojure->bacnet :property-identifier :property-list))
+          ;; for some reason the property list doesn't return all the properties...
+          get-prop-fn (fn [prop-key]
+                        [prop-key (-> (.getProperty config-o 
+                                                    (c/clojure->bacnet :property-identifier prop-key))
+                                      (c/bacnet->clojure))])]
       (->> (for [p properties
                  :let [p-name (c/bacnet->clojure p)]]
              [p-name (c/bacnet->clojure (.getProperty config-o p))])
+           ;; add some missing properties
+           (concat [(get-prop-fn :object-name) (get-prop-fn :description)])
            (into {})))))
 
 (defn get-local-device-id 
