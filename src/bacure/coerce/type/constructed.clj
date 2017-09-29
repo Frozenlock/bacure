@@ -15,6 +15,7 @@
             AccumulatorRecord$AccumulatorStatus
             ActionCommand
             ActionList
+            Address
             ;BACnetError
             Choice
             DailySchedule
@@ -35,6 +36,7 @@
             ReadAccessResult
             ReadAccessResult$Result
             ReadAccessSpecification
+            Recipient
             SequenceOf
             ServicesSupported
             SetpointReference
@@ -151,6 +153,17 @@
   [^ActionList o]
   (bacnet->clojure (.getAction o)))
 
+;;;
+
+(defmethod clojure->bacnet :address
+  [_ value]
+  (let [{:keys [mac-address network-number]} value]
+    (Address. network-number (clojure->bacnet :octet-string mac-address))))
+
+(defmethod bacnet->clojure Address
+  [^Address o]
+  {:mac-address (bacnet->clojure (.getMacAddress o))
+   :network-number (bacnet->clojure (.getNetworkNumber o))})
 
 ;;;
 ;; bacnet4j 4.0.1 -> BACnetError doesn't exist anymore?
@@ -212,13 +225,20 @@
   [^DateTime o]
   (let [date (.getDate o)
         time (.getTime o)]
-    (str (clj-time.core/date-time (.getCenturyYear date)
-                                  (.getId (.getMonth date))
-                                  (.getDay date)
-                                  (.getHour time)
-                                  (.getMinute time)
-                                  (.getSecond time)
-                                  (* (.getHundredth time) 10)))))
+    ;; we don't handle unspecified time for now.
+    (str (clj-time.core/date-time (.getCenturyYear date) ;; unspecified = 255   
+                                  (max (.getId (.getMonth date)) 1) ;; unspecified default to 1
+                                  (let [day (.getDay date)]
+                                    (if (= day com.serotonin.bacnet4j.type.primitive.Date/UNSPECIFIED_DAY)
+                                      1 day)) ;; unspecified default to 1
+                                  (if (.isHourUnspecified time) 0
+                                    (.getHour time))
+                                  (if (.isMinuteUnspecified time) 0
+                                      (.getMinute time))
+                                  (if (.isSecondUnspecified time) 0
+                                      (.getSecond time))
+                                  (if (.isHundredthUnspecified time) 0
+                                      (* (.getHundredth time) 10))))))
 
 
 
@@ -490,7 +510,7 @@
                             (:property-array-index data)]])
          bacnet->clojure)]))
 
-;;;
+
 
 (defn c-read-access-specification
   "As property-references, will accept:
@@ -546,6 +566,25 @@
           (bacnet->clojure (.getReadResult o))}
          (catch Exception e (do (println (str "Error : " (.getMessage e) " --- " prop-ref ))
                                 {prop-ref {:error {:error-message (.getMessage e)}}})))))
+
+;;;
+
+(defn c-recipient [v]
+  (-> (if (map? v)
+        (clojure->bacnet :address v)
+        (clojure->bacnet :object-identifier v))
+      (Recipient.)))
+
+(defmethod clojure->bacnet :recipient
+  [_ value]
+  (c-recipient (or value [:analog-input 0])))
+
+(defmethod bacnet->clojure Recipient
+  [^Recipient o]
+  (cond (.isAddress o)
+        (bacnet->clojure (.getAddress o))
+        (.isDevice o)
+        (bacnet->clojure (.getDevice o))))
 
 ;;;
 
