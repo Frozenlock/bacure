@@ -15,7 +15,7 @@
             AccumulatorRecord$AccumulatorStatus
             ActionCommand
             ActionList
-            BACnetError
+            ;BACnetError
             Choice
             DailySchedule
             DateTime
@@ -153,13 +153,14 @@
 
 
 ;;;
+;; bacnet4j 4.0.1 -> BACnetError doesn't exist anymore?
 
 ;; ONE WAY
 
-(defmethod bacnet->clojure BACnetError
-  [^BACnetError o]
-  {:error {:error-class (bacnet->clojure (.getErrorClass o))
-           :error-code (bacnet->clojure (.getErrorCode o))}})
+;; (defmethod bacnet->clojure BACnetError
+;;   [^BACnetError o]
+;;   {:error {:error-class (bacnet->clojure (.getErrorClass o))
+;;            :error-code (bacnet->clojure (.getErrorCode o))}})
 
 ;; (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.BACnetError
 ;;   [^BACnetError o]
@@ -194,7 +195,7 @@
 
 (defn c-date-time [string]
   (if-not string
-    (DateTime.)
+    (DateTime. (java.util.GregorianCalendar.))
     (let [t (tl/to-local-date-time
              (tf/parse
               (tf/formatters :date-time) string))
