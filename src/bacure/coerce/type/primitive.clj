@@ -13,7 +13,7 @@
             Date
             ;; Double ;; namespace clash... just use the full name
             ObjectIdentifier
-            ;; OctetString ;; not needed for bacure?
+            OctetString
             
             Null
 
@@ -125,6 +125,19 @@
   [(keyword (bacnet->clojure (.getObjectType o)))
    (.getInstanceNumber o)])
 
+
+;;;
+
+(defn c-octet-string [v]
+  (OctetString. (byte-array v)))
+
+(defmethod clojure->bacnet :octet-string
+  [_ value]
+  (c-octet-string value))
+
+(defmethod bacnet->clojure OctetString
+  [^OctetString o]
+  (into [] (.getBytes o)))
 
 ;;;
 
