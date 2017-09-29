@@ -55,6 +55,11 @@
            al))))
 
 
+(deftest test-address
+  (is (= (-> (clojure->bacnet :address {:mac-address [-64 -88 0 -1 -70 -64], :network-number 0})
+             (bacnet->clojure))
+         {:mac-address [-64 -88 0 -1 -70 -64], :network-number 0})))
+
 (deftest test-daily-schedule
   (is (example :daily-schedule))
   (let [daily-schedule (bacnet->clojure (example :daily-schedule))]
@@ -164,6 +169,18 @@
     (is (-> (clojure->bacnet :read-access-specification ras)
             (bacnet->clojure)
             (= ras)))))
+
+(deftest test-recipient
+  (is (example :recipient))
+  (let [oi [:analog-input 0]]
+    (is (-> (clojure->bacnet :recipient oi)
+            (bacnet->clojure)
+            (= oi))))
+  (let [address {:mac-address [-64 -88 0 -1 -70 -64], :network-number 0}]
+    (is (-> (clojure->bacnet :recipient address)
+            (bacnet->clojure)
+            (= address)))))
+
 
 (deftest test-services-supported
   (is (example :services-supported))
