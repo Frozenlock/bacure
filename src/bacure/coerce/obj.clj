@@ -27,7 +27,7 @@
   "Given an object type, return the properties it should have, and if
    they are :required, :optional, or :sequence." 
   [object-type]
-   (->> (ObjectProperties/getPropertyTypeDefinitions
+   (->> (ObjectProperties/getObjectPropertyTypeDefinitions
          (clojure->bacnet :object-type object-type))
         (map bacnet->clojure)
         (into {})))
