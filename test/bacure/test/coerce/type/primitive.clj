@@ -31,6 +31,16 @@
              (bacnet->clojure))
          [:analog-input 2])))
 
+(deftest test-octet-string
+  (is (= (-> (clojure->bacnet :octet-string [-64 -88 0 -1 -70 -64])
+             (bacnet->clojure))
+         [-64 -88 0 -1 -70 -64])))
+
+(deftest test-null
+  (is (= (-> (clojure->bacnet :null nil)
+             (bacnet->clojure))
+         nil)))
+
 (deftest test-real
   (is (= (-> (clojure->bacnet :real 12)
              (bacnet->clojure))
