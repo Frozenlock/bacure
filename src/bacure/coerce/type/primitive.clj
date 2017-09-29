@@ -71,7 +71,7 @@
 
 (defn c-date [string]
   (if-not string 
-    (Date.)
+    (Date. (java.util.GregorianCalendar.))
     (let [time-o (t-local/to-local-date-time
                   (tf/parse
                    (tf/formatters :year-month-day) string))]
