@@ -187,8 +187,8 @@
      
      (list (defmethod clojure->bacnet conversion-key#
              [_# key-or-number#]
-             (new ~bacnet-class
-                  (key-or-num-to-int subclass-map# key-or-number#)))
+             (. ~bacnet-class (forId
+                               (key-or-num-to-int subclass-map# key-or-number#))))
 
            (defmethod bacnet->clojure ~bacnet-class
              [value#]
