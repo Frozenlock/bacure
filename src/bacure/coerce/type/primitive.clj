@@ -43,7 +43,10 @@
 ;;;
 
 (defn c-boolean [bool]
-  (com.serotonin.bacnet4j.type.primitive.Boolean. (if (nil? bool) false bool)))
+  (when-not (string? bool) ;; to help `c-primitive`
+    (if bool
+      com.serotonin.bacnet4j.type.primitive.Boolean/TRUE
+      com.serotonin.bacnet4j.type.primitive.Boolean/FALSE)))
 
 (defmethod bacnet->clojure com.serotonin.bacnet4j.type.primitive.Boolean
   [^com.serotonin.bacnet4j.type.primitive.Boolean o]

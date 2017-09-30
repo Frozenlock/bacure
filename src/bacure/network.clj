@@ -83,11 +83,9 @@
          local-address IpNetwork/DEFAULT_BIND_IP
          port IpNetwork/DEFAULT_PORT} :as args}]
   (-> (doto (IpNetworkBuilder.)
-        (.broadcastIp broadcast-address)
-        (.localBindAddress local-address)
-        (.localNetworkNumber (int local-network-number))
-        (.port (int port))
-        ;(.reuseAddress reuse-address)
-        )
+        (.withBroadcast broadcast-address 0) ;;; <--- need to come back to the network-prefix
+        (.withLocalBindAddress local-address)
+        (.withLocalNetworkNumber (int local-network-number))
+        (.withPort (int port)))
       (.build)))
 

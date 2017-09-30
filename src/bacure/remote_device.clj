@@ -19,7 +19,7 @@
   "Get the remote device by its device-id"
   ([device-id] (rd nil device-id))
   ([local-device-id device-id]
-   (.getRemoteDevice (ld/local-device-object local-device-id) device-id)))
+   (-> (.getRemoteDeviceBlocking (ld/local-device-object local-device-id) device-id))))
 
 (defn networking-info
   "Return a map with the networking info of the remote device. (The
@@ -57,8 +57,10 @@
      (when (.getName device)
        {:protocol-services-supported (c/bacnet->clojure (.getServicesSupported device))
         :object-name (c/bacnet->clojure (.getName device))
-        :protocol-version (c/bacnet->clojure (.getProtocolVersion device))
-        :protocol-revision (c/bacnet->clojure (.getProtocolRevision device))}))))
+        ;;----- removed in bacnet4j 4.0.0 ?! -----
+        ;:protocol-version (c/bacnet->clojure (.getProtocolVersion device))
+        ;:protocol-revision (c/bacnet->clojure (.getProtocolRevision device))
+        }))))
 
 (defn retrieve-extended-information!
   "Retrieve the remote device extended information (name, segmentation,
@@ -99,7 +101,7 @@
   ([local-device-id]
    (if-let [ldo (ld/local-device-object local-device-id)] 
      (let [ld-id (ld/get-local-device-id ldo)]
-       (->> (for [rd (seq (.getRemoteDevices ldo))]
+       (->> (for [rd (remove nil? (seq (.getRemoteDevices ldo)))]
               (.getInstanceNumber rd))
             (remove nil?)
             (into #{})))

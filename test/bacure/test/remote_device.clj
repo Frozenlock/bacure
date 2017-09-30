@@ -7,7 +7,7 @@
 
 (defn init-test-local-device! [local-device-id]
   ;; adjust the broadcast-address as needed.
-  (ld/new-local-device! {:device-id local-device-id :broadcast-address "192.168.1.255"})
+  (ld/new-local-device! {:device-id local-device-id :broadcast-address "192.168.0.255"})
   (ld/initialize! local-device-id))
 
 
@@ -21,7 +21,7 @@
           (let [expected-result (into [] (for [i (range 1 11)]
                                            [[:device rd-id] [:object-list i]]))]
             (is (= expected-result 
-                   (rp/partition-array ld-id rd-id [:device rd-id] :object-list)))))))))
+                   (rp/expand-array ld-id rd-id [:device rd-id] :object-list)))))))))
 
 (deftest read-properties
   (ld/with-temp-devices
@@ -37,7 +37,7 @@
         ;; extended information (mostly to know if we can use
         ;; readPropertyMultiple)."
         (is (= (get-in (rd/extended-information ld-id rd-id) 
-                       [:protocol-services-supported :confirmed-text-message])
+                       [:protocol-services-supported :read-property])
                  true))
         ;; we try a few reads
         
@@ -52,17 +52,14 @@
                                                           [[:device rd-id] :protocol-revision]
                                                           [[:device rd-id] [:object-list 1]]]))] ;; <--- with array index
             (is (and object-name protocol-version protocol-revision))
-            ;; check if we got the property with array index back
-            (is (= [:device rd-id] (some-> result (get [:object-list 1]))))))
+            (is (= [:device rd-id] (some-> result (get :object-list))))))
 
         (testing "Read Property Multiple"
-          (let [{:keys [object-name protocol-version protocol-revision] :as results}
+          (let [{:keys [object-name protocol-version protocol-revision object-list] :as results}
                 (first (rp/read-property-multiple ld-id rd-id [[[:device rd-id] :object-name]
                                                                [[:device rd-id] :protocol-version]
                                                                [[:device rd-id] [:object-list 6]]]))]
-            (is (and object-name protocol-version))
-            (is (= (get-in results [:object-list :error :error-code])
-                   :invalid-array-index))))
+            (is (and object-name protocol-version object-list))))
         
         (let [{:keys [object-name protocol-version]}
               (first
@@ -70,60 +67,57 @@
           (is (and object-name
                    protocol-version))))
 
-      (testing "Create/delete object"
-        ;; first we delete the object to make sure it isn't there.
-        (rd/delete-remote-object! ld-id rd-id [:analog-input 1])
+      ;; (testing "Create/delete object"
+      ;;   ;; first we delete the object to make sure it isn't there.
+      ;;   (rd/delete-remote-object! ld-id rd-id [:analog-input 1])
 
-        ;; then we delete once again: we should get an error.
-        (is (= (rd/delete-remote-object! ld-id rd-id [:analog-input 1])
-               {:error {:error-class :object :error-code :unknown-object}}))
+      ;;   ;; then we delete once again: we should get an error.
+      ;;   (is (= (rd/delete-remote-object! ld-id rd-id [:analog-input 1])
+      ;;          {:error {:error-class :object :error-code :unknown-object}}))
 
-        ;; create the new object
-        (is (:success (rd/create-remote-object ld-id rd-id {:object-identifier [:analog-input 1]
-                                                            :object-name "Test analog"
-                                                            :description "This is a test"})))
+      ;;   ;; create the new object
+      ;;   (is (:success (rd/create-remote-object! ld-id rd-id {:object-identifier [:analog-input 1]
+      ;;                                                        :object-name "Test analog"
+      ;;                                                        :description "This is a test"})))
         
-        ;; set the remote property
-        (rd/set-remote-property ld-id rd-id [:analog-input 1] :present-value 10)
+      ;;   ;; set the remote property
+      ;;   (rd/set-remote-property! ld-id rd-id [:analog-input 1] :present-value 10)
 
-        ;; read the remote property; should have the value we just set.
-        (is (= (-> (rp/read-properties ld-id rd-id [[[:analog-input 1] :present-value]]) 
-                   first
-                   (get :present-value))
-               10.0))
-        (rd/delete-remote-object! ld-id rd-id [:analog-input 1])        
+      ;;   ;; read the remote property; should have the value we just set.
+      ;;   (is (= (-> (rp/read-properties ld-id rd-id [[[:analog-input 1] :present-value]]) 
+      ;;              first
+      ;;              (get :present-value))
+      ;;          10.0))
+      ;;   (rd/delete-remote-object! ld-id rd-id [:analog-input 1])        
         
-        (is (= (-> (rp/read-properties ld-id rd-id [[[:analog-input 1] :present-value]])
-                   (first)
-                   :present-value)
-               {:error {:error-class :object :error-code :unknown-object}})))
+      ;;   (is (= (-> (rp/read-properties ld-id rd-id [[[:analog-input 1] :present-value]])
+      ;;              (first)
+      ;;              :present-value)
+      ;;          {:error {:error-class :object :error-code :unknown-object}})))
 
       (testing "Splitting max read multiple references"
         ;; create a bunch of objects
         (doseq [i (range 10)]          
-          (rd/create-remote-object ld-id rd-id {:object-identifier [:analog-input i]
-                                                :object-name (str "Analog "i)
-                                                :description "This is a test"}))
+          (rd/create-remote-object! ld-id rd-id {:object-identifier [:analog-input i]
+                                                 :object-name (str "Analog "i)
+                                                 :description "This is a test"}))
 
         (let [mrmr (.getMaxReadMultipleReferences (rd/rd ld-id rd-id))]
           (.setMaxReadMultipleReferences (rd/rd ld-id rd-id) 2) ;; <--
           ;; maximum 2 references this will force us to read the
           ;; properties by sending multiple requests. They should all
-          ;; be merged once they come back.          
-          (is (= 5 (count (rp/read-properties ld-id rd-id [[[:analog-input 0] :object-name]
-                                                           [[:analog-input 1] :object-name]
-                                                           [[:analog-input 3] :object-name]
-                                                           [[:analog-input 4] :object-name]
-                                                           [[:analog-input 15] :object-name]] ;; <-- will return an error
-                                              ))))
+          ;; be merged once they come back.
+          (let [results (rp/read-properties ld-id rd-id [[[:analog-input 0] :object-name]
+                                                         [[:analog-input 1] :object-name]
+                                                         [[:analog-input 3] :object-name]
+                                                         [[:analog-input 4] :object-name]
+                                                         [[:analog-input 15] :object-name]] ;; <-- will return an error
+                                            )]
+            ;(prn results)
+            (is (= 5 (count results)))
+            (is (:error-code (:object-name (last results)))))
           (.setMaxReadMultipleReferences (rd/rd ld-id rd-id) mrmr))
-
-        ;(print (rp/read-properties ld-id rd-id [[[:device rd-id] :object-list]]))
 
         ;; delete all objects
         (doseq [i (range 10)]
-          (rd/delete-remote-object! ld-id rd-id [:analog-input i])))
-
-      
-
-      )))
+          (rd/delete-remote-object! ld-id rd-id [:analog-input i]))))))

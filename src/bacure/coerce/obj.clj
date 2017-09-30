@@ -5,7 +5,8 @@
   (:import [com.serotonin.bacnet4j.obj
             ObjectProperties
             BACnetObject
-            PropertyTypeDefinition]))
+            PropertyTypeDefinition
+            ObjectPropertyTypeDefinition]))
 
 
 
@@ -13,24 +14,35 @@
 
 (defmethod bacnet->clojure PropertyTypeDefinition
   [^PropertyTypeDefinition o]
-  [(bacnet->clojure (.getPropertyIdentifier o))
-   {:object-type (bacnet->clojure (.getObjectType o))
-    :type (-> (re-find #"[A-Za-z0-9]*$" (.toString (.getClazz o)))
-              (c/from-camel)
-              (clojure.string/lower-case)
-              (keyword))
-    :optional (bacnet->clojure (.isOptional o))
-    :required (bacnet->clojure (.isRequired o))
-    :sequence (bacnet->clojure (.isSequence o))}])
+  {:type (-> (re-find #"[A-Za-z0-9]*$" (.toString (.getClazz o)))
+             (c/from-camel)
+             (clojure.string/lower-case)
+             (keyword))
+   :property-identifier (bacnet->clojure (.getPropertyIdentifier o))
+   :array (.isArray o)
+   :collection (.isCollection o)
+   :list (.isList o)})
+
+
+(defmethod bacnet->clojure ObjectPropertyTypeDefinition
+  [^ObjectPropertyTypeDefinition o]
+  (let [{:keys [property-identifier type array collection list]}
+        (bacnet->clojure (.getPropertyTypeDefinition o))]
+    [property-identifier
+     {:object-type (bacnet->clojure (.getObjectType o))
+      :type type
+      :optional (bacnet->clojure (.isOptional o))
+      :required (bacnet->clojure (.isRequired o))
+      :sequence (when (or array collection list))}]))
 
 (defn property-type-definitions
   "Given an object type, return the properties it should have, and if
    they are :required, :optional, or :sequence." 
   [object-type]
-   (->> (ObjectProperties/getObjectPropertyTypeDefinitions
-         (clojure->bacnet :object-type object-type))
-        (map bacnet->clojure)
-        (into {})))
+  (->> (ObjectProperties/getObjectPropertyTypeDefinitions
+        (clojure->bacnet :object-type object-type))
+       (map bacnet->clojure)
+       (into {})))
 
 (defn properties-by-option
   "Return a list or properties. `option' should

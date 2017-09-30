@@ -27,7 +27,7 @@
 ;;; requests. The user can use parallel functions like `pmap' if he
 ;;; wants to send multiple requests at the same time.
 
-(def aaa (atom nil))
+(def aaa (atom nil)) ;; debugs
 
 (defn make-response-consumer [return-promise]
   (reify ResponseConsumer
@@ -75,7 +75,7 @@
          timeout (:apdu-timeout (ld/get-configs local-device-id))
          bacnet4j-future (if (.isInitialized local-device) 
                            (.send local-device
-                                  (.getRemoteDevice local-device device-id) request
+                                  (.getRemoteDeviceBlocking local-device device-id) request
                                   (make-response-consumer return-promise))                           
                            (throw (Exception. "Can't send request while the device isn't initialized.")))]
      ;; bacnet4j seems a little icky when dealing with timeouts...
@@ -226,7 +226,7 @@
 ;; ================================================================
 
 (defn find-max-refs [local-device-id device-id]
-  (let [remote-device (.getRemoteDevice (ld/local-device-object local-device-id) device-id)]
+  (let [remote-device (.getRemoteDeviceBlocking (ld/local-device-object local-device-id) device-id)]
     (.getMaxReadMultipleReferences remote-device)))
 
 
@@ -493,7 +493,7 @@
   ([local-device-id device-id object-property-references]
    object-property-references
    (if (-> (ld/local-device-object local-device-id)
-           (.getRemoteDevice device-id)
+           (.getRemoteDeviceBlocking device-id)
            (.getServicesSupported)
            c/bacnet->clojure
            :read-property-multiple)

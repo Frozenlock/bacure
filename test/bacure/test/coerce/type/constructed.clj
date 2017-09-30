@@ -134,7 +134,7 @@
 (deftest test-object-types-supported
   (is (example :object-types-supported))
   (let [ots (assoc (example :object-types-supported)
-                  :program true :accumulator true)]
+                   :program true :accumulator true)]
     (is (= (-> (clojure->bacnet :object-types-supported ots)
                (bacnet->clojure))
            ots))))
@@ -200,6 +200,15 @@
   (is (= (-> (clojure->bacnet :setpoint-reference [[:analog-input 0] [:present-value 2]])
              (bacnet->clojure))
          [[:analog-input 0] [:present-value 2]])))
+
+;; one way only for now
+;; (deftest test-shed-level
+;;   (is (example :shed-level))
+;;   (let [sl (example :shed-level)]
+;;     (is (= (-> (clojure->bacnet :shed-level sl)
+;;                (bacnet->clojure))
+;;            sl))))
+
 
 (deftest test-status-flags
   (is (example :status-flags))

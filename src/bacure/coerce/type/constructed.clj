@@ -1,7 +1,7 @@
 (ns bacure.coerce.type.constructed
   (:require [bacure.coerce :as c :refer [bacnet->clojure clojure->bacnet]]
             [bacure.coerce.type.primitive :as p]
-            [bacure.coerce.type.primitive :as e]
+            [bacure.coerce.type.enumerated :as e]
             [bacure.coerce.obj :as obj]
             [clojure.string :as str]
             [clj-time.core :as t]
@@ -16,7 +16,6 @@
             ActionCommand
             ActionList
             Address
-            ;BACnetError
             Choice
             DailySchedule
             DateTime
@@ -40,6 +39,7 @@
             SequenceOf
             ServicesSupported
             SetpointReference
+            ShedLevel
             StatusFlags
             TimeStamp
             TimeValue
@@ -165,21 +165,6 @@
   {:mac-address (bacnet->clojure (.getMacAddress o))
    :network-number (bacnet->clojure (.getNetworkNumber o))})
 
-;;;
-;; bacnet4j 4.0.1 -> BACnetError doesn't exist anymore?
-
-;; ONE WAY
-
-;; (defmethod bacnet->clojure BACnetError
-;;   [^BACnetError o]
-;;   {:error {:error-class (bacnet->clojure (.getErrorClass o))
-;;            :error-code (bacnet->clojure (.getErrorCode o))}})
-
-;; (defmethod bacnet->clojure com.serotonin.bacnet4j.type.constructed.BACnetError
-;;   [^BACnetError o]
-;;   (throw (Exception. (.toString o))))
-
-;;;
 
 ;; ONE WAY
 
@@ -448,7 +433,7 @@
 
 (defmethod bacnet->clojure LogRecord
   [^LogRecord o]
-  (let [value (.getEncodable o)]
+  (let [value (.getChoice o)]
     {:timestamp (bacnet->clojure (.getTimestamp o))
      :status-flags (bacnet->clojure (.getStatusFlags o))
      :type (c/class-to-keyword (class value))
@@ -645,7 +630,12 @@
    [:life-safety-operation 37]
    [:subscribe-cov-property 38]
    [:get-event-information 39]
-   [:write-group 40]])
+   [:write-group 40]
+   ;;services new in bacnet4j 4.0.0
+   [:subscribe-cov-multiple 41]
+   [:confirmed-cov-notification-multiple 42]
+   [:unconfirmed-cov-notification-multiple 43]
+   ])
 
 (defn coerce-supported [java-object smap]
   (doseq [item smap]
@@ -688,6 +678,33 @@
 
 ;;;
 
+
+;; (defn c-shed-level [v]
+;;   (if-let [r (:real v)]
+;;     (ShedLevel. (clojure->bacnet :real r))
+;;     (ShedLevel. (clojure->bacnet :unsigned-integer (:level v))
+;;                 ;(clojure->bacnet :boolean (:percent v))
+;;                 ;; not a BACnet boolean?!
+;;                 (:percent v))))
+
+;; (defmethod clojure->bacnet :shed-level
+;;   [_ value]
+;;   (c-shed-level (or value {:level 12 :percent true})))
+
+;; FFS... both .getLevel and .getPercent return the same value. At
+;; first look there's no way of knowing if it's a level or percent.
+;; This means we can't re-encode with certainty.
+
+(defmethod bacnet->clojure ShedLevel
+  [^ShedLevel o]
+  (or (try {:real (bacnet->clojure (.getAmount o))}
+           (catch Exception e))
+      {:level (bacnet->clojure (.getLevel o))
+       :percent (bacnet->clojure (.getPercent o))}))
+
+
+;;;
+
 (defn c-status-flags [{:keys[in-alarm fault overridden out-of-service]
                        :or {in-alarm false fault false overridden false out-of-service false}}]
   (StatusFlags. in-alarm fault overridden out-of-service))
@@ -705,40 +722,17 @@
 ;;;
 
 (def object-types-supported
-  [[:analog-input 0]
-   [:analog-output 1]
-   [:analog-value 2]
-   [:binary-input 3]
-   [:binary-output 4]
-   [:binary-value 5]
-   [:calendar 6]
-   [:command 7]
-   [:device 8]
-   [:event-enrollment 9]
-   [:file 10]
-   [:group 11]
-   [:loop 12]
-   [:multi-state-input 13]
-   [:multi-state-output 14]
-   [:notification-class 15]
-   [:program 16]
-   [:schedule 17]
-   [:averaging 18]
-   [:multi-state-value 19]
-   [:trend-log 20]
-   [:life-safety-point 21]
-   [:life-safety-zone 22]
-   [:accumulator 23]
-   [:pulse-converter 24]
-   [:event-log 25]
-   [:trend-log-multiple 27]
-   [:load-control 28]
-   [:structured-view 29]
-   [:access-door 30]])
+  (sort-by last e/object-type-map))
+
+(defn simple-coerce-supported [java-object smap]
+  (doseq [item smap]
+    (let [[k v] item]
+      (.set java-object (clojure->bacnet :object-type k) v)))
+  java-object)
 
 (defn c-object-types-supported [smap]
   (let [object-types-supported (ObjectTypesSupported.)]
-    (coerce-supported object-types-supported smap)))
+    (simple-coerce-supported object-types-supported smap)))
 
 (defmethod clojure->bacnet :object-types-supported
   [_ value]
