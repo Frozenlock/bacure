@@ -29,8 +29,7 @@
   (let [{:keys [property-identifier type array collection list]}
         (bacnet->clojure (.getPropertyTypeDefinition o))]
     [property-identifier
-     {:object-type (bacnet->clojure (.getObjectType o))
-      :type type
+     {:type type
       :optional (bacnet->clojure (.isOptional o))
       :required (bacnet->clojure (.isRequired o))
       :sequence (when (or array collection list))}]))
