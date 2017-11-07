@@ -7,7 +7,7 @@
             [bacure.coerce.type.constructed]
             [bacure.local-save :as save]))
 
-(import '(com.serotonin.bacnet4j 
+(import '(com.serotonin.bacnet4j
           LocalDevice
           obj.BACnetObject
           npdu.ip.IpNetwork
@@ -17,9 +17,9 @@
 (defmacro mapify
   "Given some symbols, construct a map with the symbols as keys, and
   the value of the symbols as the map values. For example:
- (Let [aa 12]
+  (Let [aa 12]
      (mapify aa))
- => {:aa 12}"
+  => {:aa 12}"
   [& symbols]
   `(into {}
          (filter second
@@ -37,7 +37,7 @@
 (defn list-local-devices []
   (keys @local-devices))
 
-(defn get-local-device 
+(defn get-local-device
   "Return the local-device associated with the device-id. If device-id
   is nil, simply return the first found."
   [device-id]
@@ -52,7 +52,7 @@
   (:bacnet4j-local-device (get-local-device device-id)))
 
 
-          
+
 (defn default-transport [network]
   (DefaultTransport. network))
 
@@ -71,7 +71,7 @@
   (when-let [ldo (local-device-object local-device-id)]
     (get-all-device-properties ldo)))
 
-(defn get-local-device-id 
+(defn get-local-device-id
   "Given a local device object, return the device ID."
   [device-object]
   (->> (c/clojure->bacnet :property-identifier :object-identifier)
@@ -83,8 +83,8 @@
   [local-device-id property-identifier value]
   (let [ldo (local-device-object local-device-id)]
     (.writePropertyInternal ldo
-     (c/clojure->bacnet :property-identifier property-identifier)
-     (c-obj/encode-property-value :device property-identifier value))))
+                            (c/clojure->bacnet :property-identifier property-identifier)
+                            (c-obj/encode-property-value :device property-identifier value))))
 
 (defn update-configs!
   "Given a map of properties, will update the local-device. Return the
@@ -189,7 +189,7 @@
 ;;;;;;
 
 (defn i-am-broadcast!
-  "Send an 'I am' broadcast on the network." 
+  "Send an 'I am' broadcast on the network."
   ([] (i-am-broadcast! nil))
   ([local-device-id]
    (let [ldo (local-device-object local-device-id)]
@@ -211,7 +211,7 @@
   ([] (initialize! nil))
   ([local-device-id]
    (let [ldo (local-device-object local-device-id)]
-     ;; try to bind to the bacnet port   
+     ;; try to bind to the bacnet port
      (if (.isInitialized ldo)
        (println "The local device is already initialized.")
        (let [port (or (:port (get-configs local-device-id)) 47808)
@@ -247,11 +247,11 @@
   devices will be terminated before the body executes and re-initiated
   after. Useful for tests."
   [& body]
-  `(let [initiated-devices# (doall 
+  `(let [initiated-devices# (doall
                              (for [id# (list-local-devices)
                                    :when (.isInitialized (local-device-object id#))] id#))]
      (terminate-all!)
-     (let [result# (atom nil)] 
+     (let [result# (atom nil)]
        (with-redefs [local-devices (atom {})]
          (try (reset! result# (do ~@body))
               (catch Exception e#
@@ -262,10 +262,10 @@
        @result#)))
 
 (defn local-device-backup
-  "Get the necessary information to create a local device backup." 
+  "Get the necessary information to create a local device backup."
   ([] (local-device-backup nil))
   ([local-device-id]
-   (merge (:init-configs (get-local-device local-device-id)) 
+   (merge (:init-configs (get-local-device local-device-id))
           (get-configs local-device-id))))
 
 
@@ -310,7 +310,7 @@
 
 (defn load-local-device-backup!
   "Load the local-device backup file and reset it with this new
-  configuration." 
+  configuration."
   ([local-device-id] (load-local-device-backup! local-device-id nil))
   ([local-device-id new-configs]
    (reset-local-device! (merge (save/get-configs) new-configs))))
