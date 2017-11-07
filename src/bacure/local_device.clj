@@ -104,7 +104,8 @@
 
 (def default-configs
   "Some default configurations for device creation."
-  {:device-id 1338
+  {:network-type :ipv4
+   :device-id 1338
    :port 47808
    :model-name "Bacure"
    :vendor-identifier 697
