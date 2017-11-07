@@ -156,6 +156,8 @@
   :'other-configs'   <string> OR <number> OR other
 
   ...and also the following for MS/TP:
+  :com-port  <string>                 (REQUIRED for MS/TP to work)
+  :node-type <:master or :slave>      (defaults to :master)
   :baud-rate <number>                 (defaults to 115200)
   :databits  <serial.core/DATABITS_*> (defaults to DATABITS_8)
   :stopbits  <serial.core/STOPBITS_*> (defaults to STOPBITS_1)
