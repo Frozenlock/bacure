@@ -188,7 +188,7 @@
   ([configs-map]
    (let [configs (->> configs-map
                       (merge default-configs)
-                      get-sane-configs)
+                      get-sane-configs-map)
          {:keys [device-id broadcast-address port local-address]} configs
          network (case (:network-type configs)
                    :ipv4 (net/ip-network-builder configs)
