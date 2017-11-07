@@ -116,7 +116,29 @@
                      "See https://github.com/Frozenlock/bacure for details.")
    :vendor-name "HVAC.IO"})
 
+(defn- get-sane-configs-map
+  [configs-map]
+  {:pre [(#{:ipv4 :mstp} (:network-type configs-map))]}
+
+  (assoc configs-map
+         :device-id (or (:device-id configs-map)
+                        (last (:object-identifier configs-map))
+                        (:device-id default-configs))
+         :broadcast-address (or (:broadcast-address configs-map)
+                                (net/get-broadcast-address (or (:local-address configs-map) (net/get-any-ip))))
+         :local-address (or (:local-address configs-map) IpNetwork/DEFAULT_BIND_IP)
+         :port (or (:port configs-map) IpNetwork/DEFAULT_PORT)))
+
 (declare terminate!)
+
+(defn- get-transport
+  [network configs-map]
+  (let [tp (default-transport network)]
+    (when-let [retries (:number-of-apdu-retries configs-map)]
+      (.setRetries tp retries))
+    (when-let [timeout (:apdu-timeout configs-map)]
+      (.setTimeout tp timeout))
+    tp))
 
 (defn new-local-device!
   "Return a new configured BACnet local device . (A device is required
@@ -126,11 +148,18 @@
   the atom 'local-device-configs.
 
   The optional config map can contain the following:
-  :device-id <number>
+  :network-type      <:ipv4 or :mstp> (defaults to :ipv4)
+  :device-id         <number>
   :broadcast-address <string>
-  :port <number>
-  :local-address <string> <----- You probably don't want to use it.
-  :'other-configs' <string> OR <number> OR other
+  :port              <number>
+  :local-address     <string> <----- You probably don't want to use it.
+  :'other-configs'   <string> OR <number> OR other
+
+  ...and also the following for MS/TP:
+  :baud-rate <number>                 (defaults to 115200)
+  :databits  <serial.core/DATABITS_*> (defaults to DATABITS_8)
+  :stopbits  <serial.core/STOPBITS_*> (defaults to STOPBITS_1)
+  :parity    <serial.core/PARITY_*>   (defaults to PARITY_NONE).
 
   The device ID is the device identifier on the network. It should be
   unique.
@@ -155,29 +184,21 @@
   vendor name\"}'."
   ([] (new-local-device! nil))
   ([configs-map]
-   (let [configs (merge default-configs configs-map)
-         device-id (or (:device-id configs) 
-                       (last (:object-identifier configs)) 
-                       (:device-id default-configs))
-         broadcast-address (or (:broadcast-address configs)
-                               (net/get-broadcast-address (or (:local-address configs) (net/get-any-ip))))
-         local-address (or (:local-address configs) IpNetwork/DEFAULT_BIND_IP)
-         port (or (:port configs) IpNetwork/DEFAULT_PORT)
-         tp (let [tp (-> (net/ip-network-builder (mapify broadcast-address port local-address))
-                         (default-transport)
-                         )]
-              (when-let [retries (:number-of-apdu-retries configs-map)]
-                (.setRetries tp retries))
-              (when-let [timeout (:apdu-timeout configs-map)]
-                (.setTimeout tp timeout))
-              tp)
-         ld (LocalDevice. device-id tp)]
+   (let [configs (->> configs-map
+                      (merge default-configs)
+                      get-sane-configs)
+         {:keys [device-id broadcast-address port local-address]} configs
+         network (case (:network-type configs)
+                   :ipv4 (net/ip-network-builder configs)
+                   :mstp (net/mstp-network       configs))
+         tp      (get-transport network configs)
+         ld      (LocalDevice. device-id tp)]
      ;; add the new local-device (and its configuration) into the
      ;; local devices table.
 
      (when (get-local-device device-id)
        (terminate! device-id))
-     (swap! local-devices assoc device-id 
+     (swap! local-devices assoc device-id
             {:bacnet4j-local-device ld
              :init-configs (merge configs
                                   {:device-id device-id
