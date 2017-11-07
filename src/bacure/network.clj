@@ -1,7 +1,14 @@
-(ns bacure.network)
-
-(import 'java.net.InetSocketAddress)
-(import java.net.InetAddress java.net.Inet4Address)
+(ns bacure.network
+  (:require [serial.core :as serial])
+  (:import  (java.net InetSocketAddress
+                      Inet4Address
+                      InetAddress)
+            (com.serotonin.bacnet4j.transport.DefaultTransport)
+            (com.serotonin.bacnet4j.npdu.ip IpNetwork
+                                            IpNetworkBuilder)
+            (com.serotonin.bacnet4j.npdu.mstp MasterNode
+                                              MstpNetwork
+                                              SlaveNode)))
 
 (defn get-interfaces
   "Return the list of interfaces on this machine."[]
@@ -33,14 +40,14 @@
     (->> (for [i interfaces]
            (when-let [ips (seq (ipv4-from-interface i))]
              {:interface (.getName i) :ips ips :broadcast-address (get-broadcast-address-of-interface i)
-}))
+              }))
          (remove nil?))))
-        
+
 (defn get-any-ip
   "Return the first IPv4 found." []
   (-> (interfaces-and-ips) first :ips first))
 
-(defn get-interface-from-ip 
+(defn get-interface-from-ip
   "Given an IP address, return the interface."
   [ip]
   (java.net.NetworkInterface/getByInetAddress (java.net.Inet4Address/getByName ip)))
@@ -56,7 +63,7 @@
   [IP-or-url]
   (if-not (re-matches #"\d\d?\d?\.\d\d?\d?\.\d\d?\d?\.\d\d?\d?" IP-or-url)
     (.getHostAddress
-     (->> (InetAddress/getAllByName IP-or-url) 
+     (->> (InetAddress/getAllByName IP-or-url)
           (filter #(instance? Inet4Address %))
           (first)))
     IP-or-url))
@@ -66,14 +73,9 @@
       (.getAddress)))
 
 
-;;; 
+;;;
 
-;; bacnet4j transport
-
-
-(import 'com.serotonin.bacnet4j.transport.DefaultTransport)
-(import 'com.serotonin.bacnet4j.npdu.ip.IpNetwork)
-(import 'com.serotonin.bacnet4j.npdu.ip.IpNetworkBuilder)
+;; bacnet4j transports
 
 
 (defn ip-network-builder
@@ -89,3 +91,33 @@
         (.withPort (int port)))
       (.build)))
 
+(defn- open-serial-port-from-config
+  "`config` may contain as key/val pairs any of the serial params that
+  `serial/open` takes as keyword arguments. If not supplied, `serial/open`
+  provides default values. The 'apply / partial' backflips allow us to both keep
+  `serial/open`'s defaults and also provide config from our end in our usual
+  way (as a map.)"
+  [com-port config]
+
+  (apply (partial serial/open com-port)
+         (apply concat config)))
+
+(defn mstp-network
+  "Return a MSTP network object, configured as either a slave or a master node.
+  `config` may include `:baud-rate`, `:databits`, `:stopbits`, and `:parity` if
+  desired. Defaults are provided otherwise. This class does not have a dedicated
+  'builder' like the IP network does. "
+  [{:keys [node-type com-port local-network-number retry-count]
+    :or {node-type            :master
+         local-network-number 0
+         retry-count          3}
+    :as config}]
+  {:pre [(#{:master :slave} node-type)]}
+
+  (let [serial-port   (open-serial-port-from-config com-port config)
+        input-stream  (.in-stream  serial-port)
+        output-stream (.out-stream serial-port)
+        node    (case node-type
+                  :master (new MasterNode input-stream output-stream (byte 0) retry-count)
+                  :slave  (new SlaveNode  input-stream output-stream (byte 0)))]
+    (new MstpNetwork node local-network-number)))
