@@ -5,13 +5,13 @@
             [bacure.coerce.type.primitive]
             [bacure.coerce.type.enumerated]
             [bacure.coerce.type.constructed]
-            [bacure.local-save :as save]))
+            [bacure.local-save :as save]
+            [bacure.serial-connection :as serial])
+  (:import (com.serotonin.bacnet4j LocalDevice
+                                   obj.BACnetObject
+                                   npdu.ip.IpNetwork
+                                   transport.DefaultTransport)))
 
-(import '(com.serotonin.bacnet4j
-          LocalDevice
-          obj.BACnetObject
-          npdu.ip.IpNetwork
-          transport.DefaultTransport))
 
 
 (defmacro mapify
@@ -50,7 +50,6 @@
   device-id. If device-id is nil, simply return the first found."
   [device-id]
   (:bacnet4j-local-device (get-local-device device-id)))
-
 
 
 (defn default-transport [network]
@@ -158,6 +157,7 @@
   ...and also the following for MS/TP:
   :com-port  <string>                 (REQUIRED for MS/TP to work)
   :node-type <:master or :slave>      (defaults to :master)
+  :node-id   <number < 254>           (defaults to 1)
   :baud-rate <number>                 (defaults to 115200)
   :databits  <serial.core/DATABITS_*> (defaults to DATABITS_8)
   :stopbits  <serial.core/STOPBITS_*> (defaults to STOPBITS_1)
@@ -189,10 +189,13 @@
    (let [configs (->> configs-map
                       (merge default-configs)
                       get-sane-configs-map)
-         {:keys [device-id broadcast-address port local-address]} configs
+         {:keys [device-id broadcast-address port local-address com-port]} configs
+         serial-connection (if (some? com-port)
+                             (serial/get-opened-serial-connection! com-port configs))
          network (case (:network-type configs)
                    :ipv4 (net/ip-network-builder configs)
-                   :mstp (net/mstp-network       configs))
+                   :mstp (net/mstp-network serial-connection configs))
+
          tp      (get-transport network configs)
          ld      (LocalDevice. device-id tp)]
      ;; add the new local-device (and its configuration) into the
@@ -202,6 +205,7 @@
        (terminate! device-id))
      (swap! local-devices assoc device-id
             {:bacnet4j-local-device ld
+             :serial-connection serial-connection
              :init-configs (merge configs
                                   {:device-id device-id
                                    :broadcast-address broadcast-address
@@ -253,12 +257,25 @@
          ;; return true if we are bound to the port
          port-bind)))))
 
+(defn- close-serial-connection-for-device!
+  "Closes any serial connection referred to by the given device, if it both exists
+  and is open."
+  [local-device-id]
+  (some-> (get-local-device local-device-id)
+          (get-in [:init-configs :com-port])
+          serial/ensure-connection-closed!))
+
 (defn terminate!
-  "Terminate the local device, freeing any bound port in the process."
+  "Terminate the local device, freeing any bound port in the process. Close its
+  serial connection if it exists afterwards. (If we don't terminate the device
+  first, and it's got an MS/TP node, it'll try to access a closed serial
+  connection in its MS/TP node thread and it'll throw angrily.)"
   ([] (terminate! nil))
   ([local-device-id]
-   (try (.terminate (local-device-object local-device-id))
-        (catch Exception e)))) ;if the device isn't initialized, it will throw an error
+   (try
+     (.terminate (local-device-object local-device-id))
+     (catch Exception e))
+   (close-serial-connection-for-device! local-device-id))) ;if the device isn't initialized, it will throw an error
 
 (defn terminate-all!
   "Terminate all local devices."

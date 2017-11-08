@@ -91,33 +91,19 @@
         (.withPort (int port)))
       (.build)))
 
-(defn- open-serial-port-from-config
-  "`config` may contain as key/val pairs any of the serial params that
-  `serial/open` takes as keyword arguments. If not supplied, `serial/open`
-  provides default values. The 'apply / partial' backflips allow us to both keep
-  `serial/open`'s defaults and also provide config from our end in our usual
-  way (as a map.)"
-  [com-port config]
-
-  (apply (partial serial/open com-port)
-         (apply concat config)))
-
 (defn mstp-network
   "Return a MSTP network object, configured as either a slave or a master node.
-  `config` may include `:baud-rate`, `:databits`, `:stopbits`, and `:parity` if
-  desired. Defaults are provided otherwise. This class does not have a dedicated
-  'builder' like the IP network does. "
-  [{:keys [node-type com-port local-network-number retry-count]
-    :or {node-type            :master
-         local-network-number 0
-         retry-count          3}
-    :as config}]
+  This class does not have a dedicated 'builder' like the IP network does. "
+  [serial-port {:keys [node-type node-id local-network-number retry-count]
+                :or {node-type            :master
+                     node-id              1
+                     local-network-number 0
+                     retry-count          3}}]
   {:pre [(#{:master :slave} node-type)]}
 
-  (let [serial-port   (open-serial-port-from-config com-port config)
-        input-stream  (.in-stream  serial-port)
+  (let [input-stream  (.in-stream  serial-port)
         output-stream (.out-stream serial-port)
         node    (case node-type
-                  :master (new MasterNode input-stream output-stream (byte 0) retry-count)
-                  :slave  (new SlaveNode  input-stream output-stream (byte 0)))]
-    (new MstpNetwork node local-network-number)))
+                  :master (MasterNode. input-stream output-stream (byte node-id) retry-count)
+                  :slave  (SlaveNode.  input-stream output-stream (byte node-id)))]
+    (MstpNetwork. node local-network-number)))
