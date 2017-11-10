@@ -17,4 +17,8 @@
           :source-uri "https://github.com/Frozenlock/bacure/blob/master/{filepath}#L{line}"
           ;; :src-linenum-anchor-prefix "L"
           }
-  :profiles {:dev {:source-paths ["dev"]}})
+  :profiles {:dev {:source-paths ["dev"]}}
+
+  ;; Use a higher loglevel (up to 6) to debug clj-serial
+  :jvm-opts ["-Dpurejavacomm.loglevel=0"]
+  )
