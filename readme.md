@@ -30,7 +30,7 @@ associated with the interface.
 
 (bacure.core/boot-up! {:broadcast-address "192.168.1.255"
                        :device-id 3333
-					   :object-name "My awesome BACnet device"})
+                       :object-name "My awesome BACnet device"})
 
 ```
 
@@ -71,6 +71,7 @@ The following keys are for MSTP (:network-type = :mstp)
 | :stopbits    | STOPBITS_* | STOPBITS_1  | These live in serial.core                                                                                                                                                                                                                                                                                                                                                                |
 | :parity      | PARITY_*   | PARITY_NONE | These live in serial.core                                                                                                                                                                                                                                                                                                                                                                |
 | :mstp-config | map        | nil         | Additional MSTP configuration. See below.                                                                                                                                                                                                                                                                                                                                                |
+
 
 The following keys can be included in the :mstp-config map mentioned above:
 
