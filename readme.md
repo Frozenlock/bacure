@@ -34,7 +34,7 @@ associated with the interface.
 
 ```
 
-#### Configuration Details
+### Configuration Details
 
   The optional config map can contain the following:
 
@@ -50,7 +50,8 @@ associated with the interface.
 | :description                    | string            | see local_device.clj |                                                                                                                                                                                                                                                                                                                                                                                          |
 | :vendor-name                    | string            | "HVAC.IO"            |                                                                                                                                                                                                                                                                                                                                                                                          |
 
-#### IPV4 Configuraion
+
+### IPV4 Configuraion
 The following optional keys are for IPV4 (:network-type = :ipv4)
 
 | Keyword                         | Type              | Default              | Description                                                                                                                                                                                                                                                                                                                                                                              |
@@ -59,7 +60,7 @@ The following optional keys are for IPV4 (:network-type = :ipv4)
 | :port                           | string            | 47808                | The BACnet port, usually 47808.                                                                                                                                                                                                                                                                                                                                                          |
 | :local-address                  | string            | 0.0.0.0              | The default, \"0.0.0.0\", is also known as the 'anylocal'. (Default by the underlying BACnet4J library.) This is required on Linux, Solaris and some Windows machines in order to catch packet sent as a broadcast. You can manually change it, but unless you know exactly what you are doing, bad things will happen.                                                                  |
 
-#### MSTP Configuration
+### MSTP Configuration
 The following keys are for MSTP (:network-type = :mstp)
 
 | Keyword      | Type       | Default     | Description                                                                                                                                                                                                                                                                                                                                                                              |
@@ -71,7 +72,6 @@ The following keys are for MSTP (:network-type = :mstp)
 | :parity      | PARITY_*   | PARITY_NONE | These live in serial.core                                                                                                                                                                                                                                                                                                                                                                |
 | :mstp-config | map        | nil         | Additional MSTP configuration. See below.                                                                                                                                                                                                                                                                                                                                                |
 
-##### Additional MSTP Configuration
 The following keys can be included in the :mstp-config map mentioned above:
 
 | Keyword          | Type  | Default           | Description |                                                                                                                                                                                                                                                                   |
