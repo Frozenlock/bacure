@@ -4,6 +4,27 @@ A clojure library wrapping the excellent BACnet4J library. Hopefully
 it will be able to abstract some of the ugly BACnet details
 (datatypes) and provide a seamless Clojure experience.
 
+<!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
+**Table of Contents**
+
+- [Bacure](#bacure)
+    - [Usage](#usage)
+        - [Getting Started](#getting-started)
+        - [Configuration Details](#configuration-details)
+        - [IPV4 Configuraion](#ipv4-configuraion)
+        - [MSTP Configuration](#mstp-configuration)
+        - [Multiple local devices](#multiple-local-devices)
+        - [Data coercion](#data-coercion)
+    - [Changelogs](#changelogs)
+        - [1.0.8](#108)
+        - [1.0.6](#106)
+        - [1.0.4 - 1.0.5](#104---105)
+        - [1.0.2 - 1.0.3](#102---103)
+        - [1.0.1](#101)
+        - [1.0](#10)
+    - [License](#license)
+
+<!-- markdown-toc end -->
 
 ## Usage
 
