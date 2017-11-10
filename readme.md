@@ -11,8 +11,8 @@ it will be able to abstract some of the ugly BACnet details
     - [Usage](#usage)
         - [Getting Started](#getting-started)
         - [Configuration Details](#configuration-details)
-        - [IPV4 Configuraion](#ipv4-configuraion)
-        - [MSTP Configuration](#mstp-configuration)
+            - [IPV4 Configuraion](#ipv4-configuraion)
+            - [MSTP Configuration](#mstp-configuration)
         - [Multiple local devices](#multiple-local-devices)
         - [Data coercion](#data-coercion)
     - [Changelogs](#changelogs)
@@ -72,7 +72,7 @@ associated with the interface.
 | :vendor-name                    | string            | "HVAC.IO"            |                                                                                                                                                                                                                                                                                                                                                                                          |
 
 
-### IPV4 Configuraion
+#### IPV4 Configuraion
 The following optional keys are for IPV4 (:network-type = :ipv4)
 
 | Keyword                         | Type              | Default              | Description                                                                                                                                                                                                                                                                                                                                                                              |
@@ -81,7 +81,7 @@ The following optional keys are for IPV4 (:network-type = :ipv4)
 | :port                           | string            | 47808                | The BACnet port, usually 47808.                                                                                                                                                                                                                                                                                                                                                          |
 | :local-address                  | string            | 0.0.0.0              | The default, \"0.0.0.0\", is also known as the 'anylocal'. (Default by the underlying BACnet4J library.) This is required on Linux, Solaris and some Windows machines in order to catch packet sent as a broadcast. You can manually change it, but unless you know exactly what you are doing, bad things will happen.                                                                  |
 
-### MSTP Configuration
+#### MSTP Configuration
 The following keys are for MSTP (:network-type = :mstp)
 
 | Keyword      | Type       | Default     | Description                                                                                                                                                                                                                                                                                                                                                                              |
