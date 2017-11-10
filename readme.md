@@ -202,7 +202,8 @@ BACnet4J itself uses two different types of debug output. Here's a summary:
 - To see BACnet4J's "raw" frame traffic, set the `:debug-traffic` config key in
   `:mstp-config` to `true`. This only outputs to the REPL / console.
 - To see PureJavaComm's output dump, set `purejavacomm.loglevel` in the
-  `:jvm-opts` in project.clj to something higher than 0 (and less than 7).
+  `:jvm-opts` in project.clj to something higher than 0 (and less than 7). This
+  is also REPL/console output.
 
 ProTip: Don't use Wireshark /
 [mstpcap](https://github.com/stargieg/bacnet-stack/blob/master/demo/mstpcap/mstpcap.txt)
