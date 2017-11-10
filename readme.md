@@ -204,6 +204,10 @@ BACnet4J itself uses two different types of debug output. Here's a summary:
 - To see PureJavaComm's output dump, set `purejavacomm.loglevel` in the
   `:jvm-opts` in project.clj to something higher than 0 (and less than 7).
 
+ProTip: Don't use Wireshark /
+[mstpcap](https://github.com/stargieg/bacnet-stack/blob/master/demo/mstpcap/mstpcap.txt)
+while running this on your PC. I thought the code was broken for the longest
+time until I realized that mstpcap was somehow interfering with the frames.
 
 ## Changelogs
 
