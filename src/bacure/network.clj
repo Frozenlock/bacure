@@ -1,5 +1,5 @@
 (ns bacure.network
-  (:require [serial.core :as serial])
+  (:require [bacure.serial-connection :as serial])
   (:import  (java.net InetSocketAddress
                       Inet4Address
                       InetAddress)
@@ -91,19 +91,47 @@
         (.withPort (int port)))
       (.build)))
 
-(defn mstp-network
-  "Return a MSTP network object, configured as either a slave or a master node.
-  This class does not have a dedicated 'builder' like the IP network does. "
-  [serial-port {:keys [node-type node-id local-network-number retry-count]
-                :or {node-type            :master
-                     node-id              1
-                     local-network-number 0
-                     retry-count          3}}]
+(defn- create-master-node
+  "Return a configured MasterNode object. Master nodes have extra configuration
+  they can take that governs their token-passing and poll-for-master behaviors."
+  [input-stream output-stream node-id {:keys [retry-count max-info-frames max-master-id]
+                                       :or {retry-count     3
+                                            max-info-frames 8
+                                            max-master-id   127}}]
+
+  (doto (MasterNode. input-stream output-stream node-id retry-count)
+    (.setMaxInfoFrames max-info-frames)
+    (.setMaxMaster     max-master-id)))
+
+(defn- create-slave-node
+  "Return a configured SlaveNode object."
+  [input-stream output-stream node-id]
+
+  (SlaveNode. input-stream output-stream node-id))
+
+(defn- create-mstp-node
+  "Based on our configuration, return either a MasterNode or a SlaveNode"
+  [serial-port {:keys [node-type node-id debug-traffic]
+                :or {node-type     :master
+                     node-id       1
+                     debug-traffic false}
+                :as mstp-config}]
   {:pre [(#{:master :slave} node-type)]}
 
-  (let [input-stream  (.in-stream  serial-port)
-        output-stream (.out-stream serial-port)
-        node    (case node-type
-                  :master (MasterNode. input-stream output-stream (byte node-id) retry-count)
-                  :slave  (SlaveNode.  input-stream output-stream (byte node-id)))]
+  (let [input-stream  (serial/get-input-stream  serial-port)
+        output-stream (serial/get-output-stream serial-port)
+        node-id       (byte node-id)]
+    (doto (case node-type
+            :master (create-master-node input-stream output-stream node-id mstp-config)
+            :slave  (create-slave-node  input-stream output-stream node-id))
+      (.setTrace debug-traffic))))
+
+(defn create-mstp-network
+  "Return an MstpNetwork object, configured with either a slave or a master node
+  for the local-device. This class does not have a dedicated 'builder' like the
+  IP network does, so we'll call its constructor directly."
+  [serial-port {:keys [local-network-number mstp-config]
+                :or {local-network-number 0}}]
+
+  (let [node (create-mstp-node serial-port mstp-config)]
     (MstpNetwork. node local-network-number)))

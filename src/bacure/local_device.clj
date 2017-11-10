@@ -137,6 +137,8 @@
       (.setRetries tp retries))
     (when-let [timeout (:apdu-timeout configs-map)]
       (.setTimeout tp timeout))
+    (when-let [seg-timeout (:adpu-seg-timeout configs-map)]
+      (.setSegTimeout tp seg-timeout))
     tp))
 
 (defn new-local-device!
@@ -146,44 +148,7 @@
   BACnet port. If needed, the initial configurations are available in
   the atom 'local-device-configs.
 
-  The optional config map can contain the following:
-  :network-type      <:ipv4 or :mstp> (defaults to :ipv4)
-  :device-id         <number>
-  :broadcast-address <string>
-  :port              <number>
-  :local-address     <string> <----- You probably don't want to use it.
-  :'other-configs'   <string> OR <number> OR other
-
-  ...and also the following for MS/TP:
-  :com-port  <string>                 (REQUIRED for MS/TP to work)
-  :node-type <:master or :slave>      (defaults to :master)
-  :node-id   <number < 254>           (defaults to 1)
-  :baud-rate <number>                 (defaults to 115200)
-  :databits  <serial.core/DATABITS_*> (defaults to DATABITS_8)
-  :stopbits  <serial.core/STOPBITS_*> (defaults to STOPBITS_1)
-  :parity    <serial.core/PARITY_*>   (defaults to PARITY_NONE).
-
-  The device ID is the device identifier on the network. It should be
-  unique.
-
-  The broadcast-address is the address on which we send 'WhoIs'. You
-  should not have to provide anything for this, unless you have
-  multiple interfaces or want to trick your machine into sending to a
-  'fake' broadcast address.
-
-  Port and destination port are the BACnet port, usually 47808.
-
-  The local-address will default to \"0.0.0.0\", also known as the
-  'anylocal'. (Default by the underlying BACnet4J library.) This is
-  required on Linux, Solaris and some Windows machines in order to
-  catch packet sent as a broadcast. You can manually change it, but
-  unless you know exactly what you are doing, bad things will happen.
-
-  The 'other-configs' is any configuration returned when using the
-  function 'get-configs'. These configuation can be set when the
-  device is created simply by providing them in the arguments. For
-  example, to change the vendor name, simply add '{:vendor-name \"some
-  vendor name\"}'."
+  See README for more information about how to specify configs-map."
   ([] (new-local-device! nil))
   ([configs-map]
    (let [configs (->> configs-map
@@ -194,7 +159,7 @@
                              (serial/get-opened-serial-connection! com-port configs))
          network (case (:network-type configs)
                    :ipv4 (net/ip-network-builder configs)
-                   :mstp (net/mstp-network serial-connection configs))
+                   :mstp (net/mstp-network serial-connection (:mstp-config configs)))
 
          tp      (get-transport network configs)
          ld      (LocalDevice. device-id tp)]

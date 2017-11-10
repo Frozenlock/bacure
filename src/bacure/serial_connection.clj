@@ -1,5 +1,7 @@
 (ns bacure.serial-connection
-  (:require [serial.core :as serial]))
+  (:require [serial.core :as serial])
+  (:import (java.io OutputStream
+                    InputStream)))
 
 ;; We store all serial connections as an atom, with the com-port as the key.
 ;; We'll store the connection object as well as open/closed state so we can make
@@ -50,3 +52,13 @@
 
   (ensure-connection-opened! com-port config)
   (get-connection com-port))
+
+(defn get-input-stream
+  [connection]
+
+  ^InputStream (.in-stream connection))
+
+(defn get-output-stream
+  [connection]
+
+  ^OutputStream (.out-stream connection))
