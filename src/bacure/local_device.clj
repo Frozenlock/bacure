@@ -159,7 +159,7 @@
                              (serial/get-opened-serial-connection! com-port configs))
          network (case (:network-type configs)
                    :ipv4 (net/ip-network-builder configs)
-                   :mstp (net/mstp-network serial-connection (:mstp-config configs)))
+                   :mstp (net/create-mstp-network serial-connection configs))
 
          tp      (get-transport network configs)
          ld      (LocalDevice. device-id tp)]
