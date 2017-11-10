@@ -10,11 +10,14 @@ it will be able to abstract some of the ugly BACnet details
 - [Bacure](#bacure)
     - [Usage](#usage)
         - [Getting Started](#getting-started)
+            - [IPv4](#ipv4)
+            - [MSTP](#mstp)
         - [Configuration Details](#configuration-details)
-            - [IPV4 Configuraion](#ipv4-configuraion)
+            - [IPv4 Configuraion](#ipv4-configuraion)
             - [MSTP Configuration](#mstp-configuration)
         - [Multiple local devices](#multiple-local-devices)
         - [Data coercion](#data-coercion)
+        - [Debugging Serial / MSTP](#debugging-serial--mstp)
     - [Changelogs](#changelogs)
         - [1.0.8](#108)
         - [1.0.6](#106)
@@ -43,9 +46,10 @@ To spin up a BACnet device, you can use `bacure.core/boot-up!`.
 This will create a new local device, bind it to a network interface
 and search for other BACnet devices.
 
-If you need to specify an interface (for example if you have an
-Ethernet port AND a Wifi on your computer), use the broadcast address
-associated with the interface.
+#### IPv4
+The default boot-up! behavior uses IPv4. If you need to specify an interface
+(for example if you have an Ethernet port AND a Wifi on your computer), use the
+broadcast address associated with the interface.
 
 ```clj
 
@@ -55,25 +59,44 @@ associated with the interface.
 
 ```
 
+#### MSTP
+For MSTP, we will typically want to be a Master node, and this is the default. Here's an example of how to do this on Linux:
+
+```clj
+
+(bc-core/boot-up! {:network-type :mstp
+                   :device-id    3333
+                   :object-name  "My awesome BACnet device"
+                   :com-port     "ttyS1"
+                   :baud-rate    9600
+                   :mstp-config {:local-node-id  6
+                                 :max-master-address 6}})
+
+```
+
+See [MSTP Configuration](#mstp-configuration) for more details.
+
+
 ### Configuration Details
 
   The optional config map can contain the following:
 
-| Keyword                         | Type              | Default              | Description                                                                                                                                                                                                                                                                                                                                                                              |
-|---------------------------------|-------------------|----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| :network-type                   | :ipv4 or :mstp    | :ipv4                | Specifies which type of network to create. Other config keywords may or may not be needed based on this value.                                                                                                                                                                                                                                                                           |
-| :device-id                      | number            | 1338                 | The device identifier on the network. It should be unique.                                                                                                                                                                                                                                                                                                                               |
-| :other-configs                  | anything          | nil                  | Any configuration returned when using the function 'get-configs'. These configuation can be set when the device is created simply by providing them in the arguments. For example, to change the vendor name, simply add '{:vendor-name \"some vendor name\"}'.                                                                                                                          |
-| :model-name                     | string            | "Bacure"             |                                                                                                                                                                                                                                                                                                                                                                                          |
-| :vendor-identifier              | number            | 697                  |                                                                                                                                                                                                                                                                                                                                                                                          |
-| :apdu-timeout                   | number            | 6000                 | Time in milliseconds                                                                                                                                                                                                                                                                                                                                                                     |
-| :number-of-apdu-retries         | number            | 2                    |                                                                                                                                                                                                                                                                                                                                                                                          |
-| :description                    | string            | see local_device.clj |                                                                                                                                                                                                                                                                                                                                                                                          |
-| :vendor-name                    | string            | "HVAC.IO"            |                                                                                                                                                                                                                                                                                                                                                                                          |
+| Keyword                 | Type           | Default              | Description                                                                                                                                                                                                                                                     |
+|-------------------------|----------------|----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| :network-type           | :ipv4 or :mstp | :ipv4                | Specifies which type of network to create. Other config keywords may or may not be needed based on this value.                                                                                                                                                  |
+| :device-id              | number         | 1338                 | The device identifier on the network. It should be unique.                                                                                                                                                                                                      |
+| :other-configs          | anything       | nil                  | Any configuration returned when using the function 'get-configs'. These configuation can be set when the device is created simply by providing them in the arguments. For example, to change the vendor name, simply add '{:vendor-name \"some vendor name\"}'. |
+| :model-name             | string         | "Bacure"             |                                                                                                                                                                                                                                                                 |
+| :object-name            | string         | nil                  |                                                                                                                                                                                                                                                                 |
+| :vendor-identifier      | number         | 697                  |                                                                                                                                                                                                                                                                 |
+| :apdu-timeout           | number         | 6000                 | Time in milliseconds                                                                                                                                                                                                                                            |
+| :number-of-apdu-retries | number         | 2                    |                                                                                                                                                                                                                                                                 |
+| :description            | string         | see local_device.clj |                                                                                                                                                                                                                                                                 |
+| :vendor-name            | string         | "HVAC.IO"            |                                                                                                                                                                                                                                                                 |
 
 
-#### IPV4 Configuraion
-The following optional keys are for IPV4 (:network-type = :ipv4)
+#### IPv4 Configuraion
+The following optional keys are for IPv4 (:network-type = :ipv4)
 
 | Keyword                         | Type              | Default              | Description                                                                                                                                                                                                                                                                                                                                                                              |
 |---------------------------------|-------------------|----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -163,6 +186,23 @@ If you don't know what kind of data is expected, you can use the
 
 ```
 
+
+### Debugging Serial / MSTP
+
+The MSTP network uses [clj-serial](https://github.com/peterschwarz/clj-serial),
+which uses [PureJavaComm](https://github.com/nyholku/purejavacomm) for serial
+communication. 
+
+Unfortunately, BACnet4J and PureJavaComm use different methods of logging, and
+BACnet4J itself uses two different types of debug output. Here's a summary:
+
+- To see BACnet4J log messages, see log/bacnet4j.log. Bacure's default
+  configuration uses the ALL level of detail, but this can be configured using
+  bacure/src/log4j.properties.
+- To see BACnet4J's "raw" frame traffic, set the `:debug-traffic` config key in
+  `:mstp-config` to `true`. This only outputs to the REPL / console.
+- To see PureJavaComm's output dump, set `purejavacomm.loglevel` in the
+  `:jvm-opts` in project.clj.
 
 
 ## Changelogs
