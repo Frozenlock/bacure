@@ -307,7 +307,7 @@
   [local-device-id]
 
   (terminate! local-device-id)
-  (swap! local-devices dissoc device-id))
+  (swap! local-devices dissoc local-device-id))
 
 (defn clear-all!
   "Destroy all traces of all local-devices."
