@@ -302,8 +302,16 @@
        (new-local-device! (merge backup new-config))
        (initialize! local-device-id)))))
 
+(defn clear!
+  "Destroy all traces of one local-device."
+  [local-device-id]
+
+  (terminate! local-device-id)
+  (swap! local-devices dissoc device-id))
+
 (defn clear-all!
-  "Destroy all traces of a local-device."[]
+  "Destroy all traces of all local-devices."
+  []
   (terminate-all!)
   (reset! local-devices {}))
 
