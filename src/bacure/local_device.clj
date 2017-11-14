@@ -315,7 +315,6 @@
   (terminate-all!)
   (reset! local-devices {}))
 
-
 (defn save-local-device-backup!
   "Save the device backup on a local file and return the config map."[]
   (save/save-configs (local-device-backup)))
