@@ -273,12 +273,9 @@
   ([device-id write-access-specificiations]
    (set-remote-properties! nil device-id write-access-specificiations))
   ([local-device-id device-id write-access-specificiations]
-   (if (-> (ld/local-device-object local-device-id)
-           (.getRemoteDevice device-id)
-           (.getServicesSupported)
-           c/bacnet->clojure
+   (if (-> (services-supported device-id)
            :write-property-multiple)
-     
+
      ;; normal behavior
      (let [req (WritePropertyMultipleRequest.
                 (c/clojure->bacnet :sequence-of
