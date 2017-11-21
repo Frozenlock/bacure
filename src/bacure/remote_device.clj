@@ -5,7 +5,7 @@
             [bacure.read-properties :as rp]))
 
 
-(import '(com.serotonin.bacnet4j 
+(import '(com.serotonin.bacnet4j
           RemoteDevice
           service.confirmed.CreateObjectRequest
           service.confirmed.DeleteObjectRequest
@@ -49,7 +49,7 @@
        c/bacnet->clojure)))
 
 (defn cached-extended-information
-  "Return the cached remote device extended information. Nil if we have nothing." 
+  "Return the cached remote device extended information. Nil if we have nothing."
   ([device-id] (cached-extended-information nil device-id))
   ([local-device-id device-id]
    (when-let [device (rd local-device-id device-id)]
@@ -58,28 +58,28 @@
        {:protocol-services-supported (c/bacnet->clojure (.getServicesSupported device))
         :object-name (c/bacnet->clojure (.getName device))
         ;;----- removed in bacnet4j 4.0.0 ?! -----
-        ;:protocol-version (c/bacnet->clojure (.getProtocolVersion device))
-        ;:protocol-revision (c/bacnet->clojure (.getProtocolRevision device))
+                                        ;:protocol-version (c/bacnet->clojure (.getProtocolVersion device))
+                                        ;:protocol-revision (c/bacnet->clojure (.getProtocolRevision device))
         }))))
 
 (defn retrieve-extended-information!
   "Retrieve the remote device extended information (name, segmentation,
   property multiple, etc..) and update it locally.
-  
+
   Return the cached extended information."
   ([device-id] (retrieve-extended-information! nil device-id))
   ([local-device-id device-id]
    (let [dev (rd local-device-id device-id)]
      ;; first step is to see if the device support read-property-multiple to enable faster read
      (when-let [services ;; don't do anything else if we can't get the protocol supported
-                (-> (rp/read-individually local-device-id device-id [[[:device device-id] 
+                (-> (rp/read-individually local-device-id device-id [[[:device device-id]
                                                                       :protocol-services-supported]])
                     (first)
                     (:protocol-services-supported))]
        (.setServicesSupported dev (c/clojure->bacnet :services-supported services))
        ;; then we can query for more info
-       (let [result (first (rp/read-properties local-device-id device-id 
-                                               [ [[:device device-id] :object-name 
+       (let [result (first (rp/read-properties local-device-id device-id
+                                               [ [[:device device-id] :object-name
                                                   :protocol-version :protocol-revision]]))]
          (.setName dev (:object-name result))
          (.setProtocolVersion dev (c/clojure->bacnet :unsigned-integer (:protocol-version result)))
@@ -99,7 +99,7 @@
   be in the local table. To scan a network, use `discover-network'."
   ([] (remote-devices nil))
   ([local-device-id]
-   (if-let [ldo (ld/local-device-object local-device-id)] 
+   (if-let [ldo (ld/local-device-object local-device-id)]
      (let [ld-id (ld/get-local-device-id ldo)]
        (->> (for [rd (remove nil? (seq (.getRemoteDevices ldo)))]
               (.getInstanceNumber rd))
@@ -109,7 +109,7 @@
 
 (defn remote-devices-and-names
   "Return a list of vector pair with the device-id and its name.
-   -->  ([1234 \"SimpleServer\"])" 
+   -->  ([1234 \"SimpleServer\"])"
   ([] (remote-devices-and-names nil))
   ([local-device-id]
    (for [d (remote-devices)]
@@ -122,7 +122,7 @@
    Can be used some time after the network discovery mechanism, as
    some devices might take a while to answer the WhoIs.
 
-   Remote devices are queried in parallel." 
+   Remote devices are queried in parallel."
   ([] (all-extended-information nil))
   ([local-device-id]
    (doall
@@ -155,7 +155,7 @@
   will answer a WhoIs request specifically for their ID."
   ([id] (find-remote-device nil id))
   ([local-device-id remote-device-id]
-   (find-remote-devices local-device-id 
+   (find-remote-devices local-device-id
                         {:min-range remote-device-id :max-range remote-device-id})))
 
 
@@ -185,10 +185,10 @@
   ([] (discover-network nil))
   ([local-device-id] (discover-network local-device-id 5))
   ([local-device-id tries]
-     (dorun
-      (->> (repeatedly tries #(find-remote-devices-and-extended-information local-device-id {}))
-           (take-while empty?)))
-     (remote-devices local-device-id)))
+   (dorun
+    (->> (repeatedly tries #(find-remote-devices-and-extended-information local-device-id {}))
+         (take-while empty?)))
+   (remote-devices local-device-id)))
 
 
 
@@ -201,7 +201,7 @@
   at least an :object-identifier OR an :object-type. If
   an :object-identifier isn't given, the numbering of the new object
   will be choosen by the remote device.
-  
+
   Will block until we receive a response back, success or failure.
   If the request times out, an exception is thrown."
   ([device-id object-map] (create-remote-object! nil device-id object-map))
@@ -215,7 +215,7 @@
 
 (defn delete-remote-object!
   "Send a 'delete object' request to a remote device.
-  
+
    Will block until we receive a response back, success or failure.
   If the request times out, an exception is thrown."
   ([device-id object-identifier] (delete-remote-object! nil device-id object-identifier))
@@ -237,13 +237,13 @@
 
 (defn set-remote-property!
   "Set the given remote object property.
-  
+
    Will block until we receive a response back, success or failure.
-  
+
   Property-value can be the value directly OR a map resulting from
   `advanced-property'"
   ([device-id object-identifier property-identifier property-value]
-   (set-remote-property! nil device-id object-identifier property-identifier property-value))  
+   (set-remote-property! nil device-id object-identifier property-identifier property-value))
   ([local-device-id device-id object-identifier property-identifier property-value]
    (let [obj-type (first object-identifier)
          {:keys [value priority property-array-index]} (advanced-property property-value nil nil)
@@ -262,9 +262,9 @@
 
 (defn set-remote-properties!
   "Set the given remote object properties.
-  
+
   Will block until we receive a response back, success or failure.
-  
+
   'write-access-specificiations' is a map of the form:
   {[:analog-input 1] [[:present-value 10.0][:description \"short description\"]]}
 
@@ -283,7 +283,7 @@
                                         write-access-specificiations)))]
        (rp/send-request-promise local-device-id device-id req))
      ;; fallback to writing properties individually
-     (let [set-object-props! 
+     (let [set-object-props!
            (fn [[obj-id props]]
              (for [[prop-id prop-value] props]
                (-> (set-remote-property! local-device-id device-id obj-id prop-id prop-value)
@@ -300,15 +300,14 @@
 ;; ;; Maintenance of the remote devices list
 ;; ;; ================================================================
 
-(defn is-alive? 
+(defn is-alive?
   "Check if the remote device is still alive. This is the closest
-  thing to a 'ping' in the BACnet world." 
+  thing to a 'ping' in the BACnet world."
   ([device-id] (is-alive? nil device-id))
   ([local-device-id device-id]
    (try ;; try to read the :system-status property. In case of timeout,
      ;; catch the exception and return nil.
-     (rp/read-properties local-device-id 
+     (rp/read-properties local-device-id
                          device-id
                          [[[:device device-id] :system-status]])
      (catch Exception e nil))))
-
