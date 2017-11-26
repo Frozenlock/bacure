@@ -212,6 +212,11 @@ time until I realized that mstpcap was somehow interfering with the frames.
 
 ## Changelogs
 
+### 1.1.0 (to be released)
+- Update BACnet4J to 4.0.1
+- Add MSTP support! (Thanks to Alex Whitt)
+
+
 ### 1.0.8
 - Bugfix in underlying BACnet4J library : endless loop on segmented
   communication error.
