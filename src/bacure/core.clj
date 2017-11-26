@@ -11,6 +11,7 @@
   ([] (boot-up! nil))
   ([configs]
    (ld/load-local-device-backup! (:device-id configs) configs)
+   
    (ld/i-am-broadcast!)
    (future (rd/discover-network)
            true)))

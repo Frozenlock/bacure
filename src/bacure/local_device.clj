@@ -5,21 +5,21 @@
             [bacure.coerce.type.primitive]
             [bacure.coerce.type.enumerated]
             [bacure.coerce.type.constructed]
-            [bacure.local-save :as save]))
+            [bacure.local-save :as save]
+            [bacure.serial-connection :as serial])
+  (:import (com.serotonin.bacnet4j LocalDevice
+                                   obj.BACnetObject
+                                   npdu.ip.IpNetwork
+                                   transport.DefaultTransport)))
 
-(import '(com.serotonin.bacnet4j 
-          LocalDevice
-          obj.BACnetObject
-          npdu.ip.IpNetwork
-          transport.DefaultTransport))
 
 
 (defmacro mapify
   "Given some symbols, construct a map with the symbols as keys, and
   the value of the symbols as the map values. For example:
- (Let [aa 12]
+  (Let [aa 12]
      (mapify aa))
- => {:aa 12}"
+  => {:aa 12}"
   [& symbols]
   `(into {}
          (filter second
@@ -37,7 +37,7 @@
 (defn list-local-devices []
   (keys @local-devices))
 
-(defn get-local-device 
+(defn get-local-device
   "Return the local-device associated with the device-id. If device-id
   is nil, simply return the first found."
   [device-id]
@@ -52,7 +52,6 @@
   (:bacnet4j-local-device (get-local-device device-id)))
 
 
-          
 (defn default-transport [network]
   (DefaultTransport. network))
 
@@ -71,7 +70,7 @@
   (when-let [ldo (local-device-object local-device-id)]
     (get-all-device-properties ldo)))
 
-(defn get-local-device-id 
+(defn get-local-device-id
   "Given a local device object, return the device ID."
   [device-object]
   (->> (c/clojure->bacnet :property-identifier :object-identifier)
@@ -83,8 +82,8 @@
   [local-device-id property-identifier value]
   (let [ldo (local-device-object local-device-id)]
     (.writePropertyInternal ldo
-     (c/clojure->bacnet :property-identifier property-identifier)
-     (c-obj/encode-property-value :device property-identifier value))))
+                            (c/clojure->bacnet :property-identifier property-identifier)
+                            (c-obj/encode-property-value :device property-identifier value))))
 
 (defn update-configs!
   "Given a map of properties, will update the local-device. Return the
@@ -104,7 +103,8 @@
 
 (def default-configs
   "Some default configurations for device creation."
-  {:device-id 1338
+  {:network-type :ipv4
+   :device-id 1338
    :port 47808
    :model-name "Bacure"
    :vendor-identifier 697
@@ -115,7 +115,31 @@
                      "See https://github.com/Frozenlock/bacure for details.")
    :vendor-name "HVAC.IO"})
 
+(defn- get-sane-configs-map
+  [configs-map]
+  {:pre [(#{:ipv4 :mstp} (:network-type configs-map))]}
+
+  (assoc configs-map
+         :device-id (or (:device-id configs-map)
+                        (last (:object-identifier configs-map))
+                        (:device-id default-configs))
+         :broadcast-address (or (:broadcast-address configs-map)
+                                (net/get-broadcast-address (or (:local-address configs-map) (net/get-any-ip))))
+         :local-address (or (:local-address configs-map) IpNetwork/DEFAULT_BIND_IP)
+         :port (or (:port configs-map) IpNetwork/DEFAULT_PORT)))
+
 (declare terminate!)
+
+(defn- get-transport
+  [network configs-map]
+  (let [tp (default-transport network)]
+    (when-let [retries (:number-of-apdu-retries configs-map)]
+      (.setRetries tp retries))
+    (when-let [timeout (:apdu-timeout configs-map)]
+      (.setTimeout tp timeout))
+    (when-let [seg-timeout (:adpu-seg-timeout configs-map)]
+      (.setSegTimeout tp seg-timeout))
+    tp))
 
 (defn new-local-device!
   "Return a new configured BACnet local device . (A device is required
@@ -124,60 +148,29 @@
   BACnet port. If needed, the initial configurations are available in
   the atom 'local-device-configs.
 
-  The optional config map can contain the following:
-  :device-id <number>
-  :broadcast-address <string>
-  :port <number>
-  :local-address <string> <----- You probably don't want to use it.
-  :'other-configs' <string> OR <number> OR other
-
-  The device ID is the device identifier on the network. It should be
-  unique.
-
-  The broadcast-address is the address on which we send 'WhoIs'. You
-  should not have to provide anything for this, unless you have
-  multiple interfaces or want to trick your machine into sending to a
-  'fake' broadcast address.
-
-  Port and destination port are the BACnet port, usually 47808.
-
-  The local-address will default to \"0.0.0.0\", also known as the
-  'anylocal'. (Default by the underlying BACnet4J library.) This is
-  required on Linux, Solaris and some Windows machines in order to
-  catch packet sent as a broadcast. You can manually change it, but
-  unless you know exactly what you are doing, bad things will happen.
-
-  The 'other-configs' is any configuration returned when using the
-  function 'get-configs'. These configuation can be set when the
-  device is created simply by providing them in the arguments. For
-  example, to change the vendor name, simply add '{:vendor-name \"some
-  vendor name\"}'."
+  See README for more information about how to specify configs-map."
   ([] (new-local-device! nil))
   ([configs-map]
-   (let [configs (merge default-configs configs-map)
-         device-id (or (:device-id configs) 
-                       (last (:object-identifier configs)) 
-                       (:device-id default-configs))
-         broadcast-address (or (:broadcast-address configs)
-                               (net/get-broadcast-address (or (:local-address configs) (net/get-any-ip))))
-         local-address (or (:local-address configs) IpNetwork/DEFAULT_BIND_IP)
-         port (or (:port configs) IpNetwork/DEFAULT_PORT)
-         tp (let [tp (-> (net/ip-network-builder (mapify broadcast-address port local-address))
-                         (default-transport)
-                         )]
-              (when-let [retries (:number-of-apdu-retries configs-map)]
-                (.setRetries tp retries))
-              (when-let [timeout (:apdu-timeout configs-map)]
-                (.setTimeout tp timeout))
-              tp)
-         ld (LocalDevice. device-id tp)]
+   (let [configs (->> configs-map
+                      (merge default-configs)
+                      get-sane-configs-map)
+         {:keys [device-id broadcast-address port local-address com-port]} configs
+         serial-connection (if (some? com-port)
+                             (serial/get-opened-serial-connection! com-port configs))
+         network (case (:network-type configs)
+                   :ipv4 (net/ip-network-builder configs)
+                   :mstp (net/create-mstp-network serial-connection configs))
+
+         tp      (get-transport network configs)
+         ld      (LocalDevice. device-id tp)]
      ;; add the new local-device (and its configuration) into the
      ;; local devices table.
 
      (when (get-local-device device-id)
        (terminate! device-id))
-     (swap! local-devices assoc device-id 
+     (swap! local-devices assoc device-id
             {:bacnet4j-local-device ld
+             :serial-connection serial-connection
              :init-configs (merge configs
                                   {:device-id device-id
                                    :broadcast-address broadcast-address
@@ -189,7 +182,7 @@
 ;;;;;;
 
 (defn i-am-broadcast!
-  "Send an 'I am' broadcast on the network." 
+  "Send an 'I am' broadcast on the network."
   ([] (i-am-broadcast! nil))
   ([local-device-id]
    (let [ldo (local-device-object local-device-id)]
@@ -211,7 +204,7 @@
   ([] (initialize! nil))
   ([local-device-id]
    (let [ldo (local-device-object local-device-id)]
-     ;; try to bind to the bacnet port   
+     ;; try to bind to the bacnet port
      (if (.isInitialized ldo)
        (println "The local device is already initialized.")
        (let [port (or (:port (get-configs local-device-id)) 47808)
@@ -229,12 +222,25 @@
          ;; return true if we are bound to the port
          port-bind)))))
 
+(defn- close-serial-connection-for-device!
+  "Closes any serial connection referred to by the given device, if it both exists
+  and is open."
+  [local-device-id]
+  (some-> (get-local-device local-device-id)
+          (get-in [:init-configs :com-port])
+          serial/ensure-connection-closed!))
+
 (defn terminate!
-  "Terminate the local device, freeing any bound port in the process."
+  "Terminate the local device, freeing any bound port in the process. Close its
+  serial connection if it exists afterwards. (If we don't terminate the device
+  first, and it's got an MS/TP node, it'll try to access a closed serial
+  connection in its MS/TP node thread and it'll throw angrily.)"
   ([] (terminate! nil))
   ([local-device-id]
-   (try (.terminate (local-device-object local-device-id))
-        (catch Exception e)))) ;if the device isn't initialized, it will throw an error
+   (try
+     (.terminate (local-device-object local-device-id))
+     (catch Exception e))
+   (close-serial-connection-for-device! local-device-id))) ;if the device isn't initialized, it will throw an error
 
 (defn terminate-all!
   "Terminate all local devices."
@@ -247,11 +253,11 @@
   devices will be terminated before the body executes and re-initiated
   after. Useful for tests."
   [& body]
-  `(let [initiated-devices# (doall 
+  `(let [initiated-devices# (doall
                              (for [id# (list-local-devices)
                                    :when (.isInitialized (local-device-object id#))] id#))]
      (terminate-all!)
-     (let [result# (atom nil)] 
+     (let [result# (atom nil)]
        (with-redefs [local-devices (atom {})]
          (try (reset! result# (do ~@body))
               (catch Exception e#
@@ -262,10 +268,10 @@
        @result#)))
 
 (defn local-device-backup
-  "Get the necessary information to create a local device backup." 
+  "Get the necessary information to create a local device backup."
   ([] (local-device-backup nil))
   ([local-device-id]
-   (merge (:init-configs (get-local-device local-device-id)) 
+   (merge (:init-configs (get-local-device local-device-id))
           (get-configs local-device-id))))
 
 
@@ -296,11 +302,18 @@
        (new-local-device! (merge backup new-config))
        (initialize! local-device-id)))))
 
+(defn clear!
+  "Destroy all traces of one local-device."
+  [local-device-id]
+
+  (terminate! local-device-id)
+  (swap! local-devices dissoc local-device-id))
+
 (defn clear-all!
-  "Destroy all traces of a local-device."[]
+  "Destroy all traces of all local-devices."
+  []
   (terminate-all!)
   (reset! local-devices {}))
-
 
 (defn save-local-device-backup!
   "Save the device backup on a local file and return the config map."[]
@@ -310,7 +323,7 @@
 
 (defn load-local-device-backup!
   "Load the local-device backup file and reset it with this new
-  configuration." 
+  configuration."
   ([local-device-id] (load-local-device-backup! local-device-id nil))
   ([local-device-id new-configs]
    (reset-local-device! (merge (save/get-configs) new-configs))))
