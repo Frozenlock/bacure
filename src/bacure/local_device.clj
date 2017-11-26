@@ -239,8 +239,8 @@
   ([local-device-id]
    (try
      (.terminate (local-device-object local-device-id))
-     (catch Exception e))
-   (close-serial-connection-for-device! local-device-id))) ;if the device isn't initialized, it will throw an error
+     (catch Exception e)) ;if the device isn't initialized, it will throw an error
+   (close-serial-connection-for-device! local-device-id)))
 
 (defn terminate-all!
   "Terminate all local devices."
