@@ -356,7 +356,7 @@
    in the case of proprietary objects.)" [object-property-references]
    (for [single-object-property-references object-property-references]
      (let [[object-identifier & properties] single-object-property-references
-           f (fn [x] (if (#{:all :required :optional} x)
+           f (fn [x] (if (#{:all :required :optional :sequence} x)
                        (co/properties-by-option (first object-identifier) x) [x]))]
        (cons object-identifier
              (distinct (for [prop properties new-prop (f prop)] new-prop))))))
