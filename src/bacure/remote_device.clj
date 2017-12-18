@@ -2,17 +2,20 @@
   (:require [bacure.coerce :as c]
             [bacure.coerce.obj :as obj]
             [bacure.local-device :as ld]
-            [bacure.read-properties :as rp]))
+            [bacure.read-properties :as rp]
+            [bacure.remote-device :as rd]
+            [bacure.util :as util])
+  (:import (com.serotonin.bacnet4j RemoteDevice
+                                   event.DeviceEventAdapter
+                                   service.confirmed.CreateObjectRequest
+                                   service.confirmed.DeleteObjectRequest
+                                   service.confirmed.WritePropertyRequest
+                                   service.confirmed.WritePropertyMultipleRequest
+                                   service.unconfirmed.WhoIsRequest
+                                   exception.BACnetTimeoutException)))
 
 
-(import '(com.serotonin.bacnet4j
-          RemoteDevice
-          service.confirmed.CreateObjectRequest
-          service.confirmed.DeleteObjectRequest
-          service.confirmed.WritePropertyRequest
-          service.confirmed.WritePropertyMultipleRequest
-          service.unconfirmed.WhoIsRequest
-          exception.BACnetTimeoutException))
+
 
 
 (defn rd
