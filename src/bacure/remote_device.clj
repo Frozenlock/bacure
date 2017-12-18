@@ -2,17 +2,20 @@
   (:require [bacure.coerce :as c]
             [bacure.coerce.obj :as obj]
             [bacure.local-device :as ld]
-            [bacure.read-properties :as rp]))
+            [bacure.read-properties :as rp]
+            [bacure.remote-device :as rd]
+            [bacure.util :as util])
+  (:import (com.serotonin.bacnet4j RemoteDevice
+                                   event.DeviceEventAdapter
+                                   service.confirmed.CreateObjectRequest
+                                   service.confirmed.DeleteObjectRequest
+                                   service.confirmed.WritePropertyRequest
+                                   service.confirmed.WritePropertyMultipleRequest
+                                   service.unconfirmed.WhoIsRequest
+                                   exception.BACnetTimeoutException)))
 
 
-(import '(com.serotonin.bacnet4j
-          RemoteDevice
-          service.confirmed.CreateObjectRequest
-          service.confirmed.DeleteObjectRequest
-          service.confirmed.WritePropertyRequest
-          service.confirmed.WritePropertyMultipleRequest
-          service.unconfirmed.WhoIsRequest
-          exception.BACnetTimeoutException))
+
 
 
 (defn rd
@@ -131,6 +134,43 @@
           (remote-devices local-device-id)))))
 
 
+(defn is-remote-device-in-cache?
+  [local-device-id remote-device-id]
+
+  (let [current-remote-devices (remote-devices local-device-id)]
+    (current-remote-devices remote-device-id)))
+
+(defn- add-remote-device-to-cache
+  "Add the remote device to the cache the same way all of BACnet4J's other
+  handlers do it. Unfortunately, BACnet4J doesn't give us any handles with which
+  to do this without going through their automagical RemoteDeviceDiscoverer or
+  RemoteDeviceFinder, which do their own WhoIs calls on top of any WhoIs
+  broadcasts we might want to do ourselves."
+
+  [local-device-id remote-device]
+
+  (let [local-device-object (ld/local-device-object local-device-id)
+        remote-device-id    (.getInstanceNumber remote-device)
+        already-cached?     (is-remote-device-in-cache? local-device-id remote-device-id)
+        cache-policy        (-> local-device-object
+                                (.getCachePolicies)
+                                (.getDevicePolicy remote-device-id))]
+
+    (when-not already-cached?
+      (-> local-device-object
+          (util/private-field "remoteDeviceCache") ;; TODO: ouch.
+          (.putEntity remote-device-id remote-device cache-policy)))))
+
+(defn- get-i-am-handler
+  "Responds to IAms from WhoIs requests we send, and adds those remote devices to
+  the local device's cache."
+  [local-device-id]
+
+  (proxy [DeviceEventAdapter] []
+    (iAmReceived [remote-device]
+
+      (add-remote-device-to-cache local-device-id remote-device))))
+
 (defn find-remote-devices
   "We find remote devices by sending a 'WhoIs' broadcast. Every device
   that responds is added to the remote-devices field in the
@@ -142,12 +182,29 @@
   ([] (find-remote-devices {}))
   ([{:keys [min-range max-range] :as args}] (find-remote-devices nil args))
   ([local-device-id {:keys [min-range max-range]}]
-   (.sendGlobalBroadcast (ld/local-device-object local-device-id)
-                         (if (or min-range max-range)
-                           (WhoIsRequest.
-                            (c/clojure->bacnet :unsigned-integer (or min-range 0))
-                            (c/clojure->bacnet :unsigned-integer (or max-range 4194304)))
-                           (WhoIsRequest.)))))
+   (let  [local-device (ld/local-device-object local-device-id)
+          i-am-listener (get-i-am-handler local-device-id)]
+     (-> local-device
+         (.getEventHandler)
+         (.addListener i-am-listener))
+
+     (doto local-device
+       (.sendGlobalBroadcast (if (or min-range max-range)
+                               (WhoIsRequest.
+                                (c/clojure->bacnet :unsigned-integer (or min-range 0))
+                                (c/clojure->bacnet :unsigned-integer (or max-range 4194304)))
+                               (WhoIsRequest.))))
+
+     (Thread/sleep 1000) ;wait a little to ensure we get the responses
+     (-> local-device
+         (.getEventHandler)
+         (.removeListener i-am-listener)))))
+
+(defn clear-remote-devices!
+  ([] (clear-remote-devices! nil))
+  ([local-device-id]
+   (doto (ld/local-device-object local-device-id)
+     (.clearRemoteDevices))))
 
 (defn find-remote-device
   "Send a WhoIs for a single device-id, effectively finding a single
@@ -169,7 +226,6 @@
 
   ([local-device-id {:keys [min-range max-range dest-port] :as args}]
    (find-remote-devices local-device-id args)
-   (Thread/sleep 1000) ;wait a little to insure we get the responses
    (all-extended-information local-device-id)
    (remote-devices local-device-id)))
 
