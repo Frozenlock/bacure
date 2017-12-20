@@ -167,6 +167,8 @@
      ;; add the new local-device (and its configuration) into the
      ;; local devices table.
 
+     (events/add-listener! ld device-id)
+
      (when (get-local-device device-id)
        (terminate! device-id))
 
