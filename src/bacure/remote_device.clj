@@ -12,6 +12,8 @@
                                    service.confirmed.WritePropertyRequest
                                    service.confirmed.WritePropertyMultipleRequest
                                    service.unconfirmed.WhoIsRequest
+                                   service.unconfirmed.WhoHasRequest
+                                   service.unconfirmed.WhoHasRequest$Limits
                                    exception.BACnetTimeoutException)))
 
 
@@ -161,7 +163,7 @@
           (util/private-field "remoteDeviceCache") ;; TODO: ouch.
           (.putEntity remote-device-id remote-device cache-policy)))))
 
-(defn- get-i-am-handler
+(defn- get-i-am-event-listener
   "Responds to IAms from WhoIs requests we send, and adds those remote devices to
   the local device's cache."
   [local-device-id]
@@ -170,6 +172,13 @@
     (iAmReceived [remote-device]
 
       (add-remote-device-to-cache local-device-id remote-device))))
+
+(defn- add-listener
+  [local-device listener]
+
+  (-> local-device
+      (.getEventHandler)
+      (.addListener listener)))
 
 (defn find-remote-devices
   "We find remote devices by sending a 'WhoIs' broadcast. Every device
@@ -183,10 +192,9 @@
   ([{:keys [min-range max-range] :as args}] (find-remote-devices nil args))
   ([local-device-id {:keys [min-range max-range]}]
    (let  [local-device (ld/local-device-object local-device-id)
-          i-am-listener (get-i-am-handler local-device-id)]
-     (-> local-device
-         (.getEventHandler)
-         (.addListener i-am-listener))
+          i-am-listener (get-i-am-event-listener local-device-id)]
+
+     (add-listener local-device i-am-listener)
 
      (doto local-device
        (.sendGlobalBroadcast (if (or min-range max-range)
@@ -351,6 +359,35 @@
             (#(if (seq %) {:error {:write-properties-errors (vec %)}} {:success true})))))))
 
 
+(defn- get-i-have-event-listener
+  "Responds to IAms from WhoIs requests we send, and adds those remote devices to
+  the local device's cache."
+  [local-device-id]
+
+  (proxy [DeviceEventAdapter] []
+    ))
+
+(defn send-who-has
+  ([device-id object-identifier]
+   (send-who-has nil device-id object-identifier nil))
+
+  ([device-id object-identifier config]
+   (send-who-has nil device-id object-identifier config))
+
+  ([local-device-id device-id object-identifier {:keys [min-range max-range]
+                                                 :or   {min-range 0
+                                                        max-range 4194303}
+                                                 :as   config}]
+
+   (let [local-device      (ld/local-device-object local-device-id)
+         min-range         (c/clojure->bacnet :unsigned-integer min-range)
+         max-range         (c/clojure->bacnet :unsigned-integer max-range)
+         object-identifier (c/clojure->bacnet :object-identifier object-identifier)
+         limits            (WhoHasRequest$Limits. min-range max-range)
+         request           (WhoHasRequest. limits object-identifier)]
+
+     (doto local-device (.sendGlobalBroadcast request)
+           ))))
 
 ;; ;; ================================================================
 ;; ;; Maintenance of the remote devices list
