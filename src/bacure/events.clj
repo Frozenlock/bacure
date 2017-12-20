@@ -5,9 +5,11 @@
 
 ;; Public methods for manipulating cache
 (defn cached-remote-devices
-  [local-device-id]
+  ([] (cached-remote-devices nil))
 
-  (state/get-local-device-property local-device-id :remote-devices))
+  ([local-device-id]
+   (state/get-local-device-property local-device-id :remote-devices)))
+
 (defn cached-remote-objects
   ([] (cached-remote-objects nil))
 
