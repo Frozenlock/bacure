@@ -8,6 +8,11 @@
   [local-device-id]
 
   (state/get-local-device-property local-device-id :remote-devices))
+(defn cached-remote-objects
+  ([] (cached-remote-objects nil))
+
+  ([local-device-id]
+   (state/get-local-device-property local-device-id :remote-objects)))
 
 (defn clear-cached-remote-devices!
   ([] (clear-cached-remote-devices! nil))
