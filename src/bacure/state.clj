@@ -26,7 +26,8 @@
 (defn- assoc-value!
   [state k v]
 
-  (swap! state assoc k v))
+  (swap! state assoc k v)
+  v)
 
 (defn- assoc-in-value!
   [state k sub-ks v]
@@ -35,7 +36,8 @@
         ks (if (vector? sub-ks)
              (concat [k] sub-ks)
              [k sub-ks])]
-    (swap! state assoc-in ks v)))
+    (swap! state assoc-in ks v)
+    v))
 
 (defn- dissoc-value!
   [state k]
