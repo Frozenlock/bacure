@@ -124,14 +124,16 @@
           (remote-devices local-device-id)))))
 
 (defn find-remote-device-having-object
-  ([device-id object-identifier]
-   (services/send-who-has nil device-id object-identifier nil))
+  ([object-identifier]
+   (find-remote-device-having-object nil object-identifier nil))
 
-  ([device-id object-identifier args]
-   (services/send-who-has nil device-id object-identifier args))
+  ([object-identifier args]
+   (find-remote-device-having-object nil object-identifier args))
 
-  ([local-device-id device-id object-identifier args]
-   (services/send-who-has local-device-id device-id object-identifier args)))
+  ([local-device-id object-identifier args]
+   (services/send-who-has local-device-id object-identifier args)
+   (Thread/sleep 1000)
+   (events/cached-remote-objects local-device-id)))
 
 (defn find-remote-devices
   "We find remote devices by sending a 'WhoIs' broadcast. Every device
@@ -142,13 +144,15 @@
   highly recommended, even if it might take a little longer to
   execute."
   ([]
-   (services/send-who-is nil {}))
+   (find-remote-devices nil {}))
 
   ([args]
-   (services/send-who-is nil args))
+   (find-remote-devices nil args))
 
   ([local-device-id args]
-   (services/send-who-is local-device-id args)))
+   (services/send-who-is local-device-id args)
+   (Thread/sleep 1000)
+   (events/cached-remote-devices local-device-id)))
 
 (defn find-remote-device
   "Send a WhoIs for a single device-id, effectively finding a single
@@ -186,6 +190,7 @@
   ([] (discover-network nil))
   ([local-device-id] (discover-network local-device-id 5))
   ([local-device-id tries]
+   (events/clear-cached-remote-devices!)
    (dorun
     (->> (repeatedly tries #(find-remote-devices-and-extended-information local-device-id {}))
          (take-while empty?)))
