@@ -34,7 +34,7 @@
 
 
 ;; we store all the local devices with their device-id as the key.
-(defonce local-devices state/local-devices)
+(def local-devices state/local-devices)
 
 (defn list-local-devices []
   (keys @local-devices))
