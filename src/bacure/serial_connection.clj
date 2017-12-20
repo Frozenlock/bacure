@@ -1,5 +1,6 @@
 (ns bacure.serial-connection
-  (:require [serial.core :as serial])
+  (:require [serial.core :as serial]
+            [bacure.state :as state])
   (:import (java.io OutputStream
                     InputStream)))
 
@@ -8,16 +9,15 @@
 ;; intelligent choices about opening or closing it (to avoid throwing). We have
 ;; to hold on to these references or we'll get problems with connections left
 ;; open if we try to delete and re-create a local device.
-(defonce serial-connections (atom {}))
 
 (defn- get-connection
   "Returns nil if we haven't created this connection yet."
   [com-port]
-  (get-in @serial-connections [com-port :connection]))
+  (state/get-serial-connection-property com-port :connection))
 
 (defn connection-opened?
   [com-port]
-  (get-in @serial-connections [com-port :opened]))
+  (state/get-serial-connection-property com-port :opened))
 
 (defn- ensure-connection-opened!
   "`config` may contain as key/val pairs any of the serial params that
@@ -30,7 +30,7 @@
   (if-not (connection-opened? com-port)
     (let [opened-connection (apply (partial serial/open com-port)
                                    (apply concat config))]
-      (swap! serial-connections assoc com-port {:connection opened-connection
+      (state/assoc-serial-connection! com-port {:connection opened-connection
                                                 :opened true}))))
 
 (defn ensure-connection-closed!
@@ -43,7 +43,7 @@
 
     (let [closed-connection (some-> (get-connection com-port)
                                     serial/close!)]
-      (swap! serial-connections assoc com-port {:connection closed-connection
+      (state/assoc-serial-connection! com-port {:connection closed-connection
                                                 :opened     false}))))
 
 (defn get-opened-serial-connection!

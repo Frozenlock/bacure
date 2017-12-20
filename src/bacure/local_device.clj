@@ -6,7 +6,9 @@
             [bacure.coerce.type.enumerated]
             [bacure.coerce.type.constructed]
             [bacure.local-save :as save]
-            [bacure.serial-connection :as serial])
+            [bacure.serial-connection :as serial]
+            [bacure.state :as state]
+            [bacure.events :as events])
   (:import (com.serotonin.bacnet4j LocalDevice
                                    obj.BACnetObject
                                    npdu.ip.IpNetwork
@@ -32,7 +34,7 @@
 
 
 ;; we store all the local devices with their device-id as the key.
-(defonce local-devices (atom {}))
+(defonce local-devices state/local-devices)
 
 (defn list-local-devices []
   (keys @local-devices))
@@ -41,15 +43,14 @@
   "Return the local-device associated with the device-id. If device-id
   is nil, simply return the first found."
   [device-id]
-  (if-not device-id
-    (some-> @local-devices first val)
-    (get @local-devices device-id)))
+
+  (state/get-local-device device-id))
 
 (defn local-device-object
   "Return the local-device bacnet4j object associated with the
   device-id. If device-id is nil, simply return the first found."
   [device-id]
-  (:bacnet4j-local-device (get-local-device device-id)))
+  (state/get-local-device-property device-id :bacnet4j-local-device))
 
 
 (defn default-transport [network]
@@ -168,14 +169,17 @@
 
      (when (get-local-device device-id)
        (terminate! device-id))
-     (swap! local-devices assoc device-id
-            {:bacnet4j-local-device ld
-             :serial-connection serial-connection
-             :init-configs (merge configs
-                                  {:device-id device-id
-                                   :broadcast-address broadcast-address
-                                   :port port
-                                   :local-address local-address})})
+
+     (state/assoc-local-device! device-id
+                                {:bacnet4j-local-device ld
+                                 :serial-connection serial-connection
+                                 :remote-devices #{}
+                                 :remote-objects {}
+                                 :init-configs (merge configs
+                                                      {:device-id device-id
+                                                       :broadcast-address broadcast-address
+                                                       :port port
+                                                       :local-address local-address})})
      (update-configs! device-id configs)
      device-id)))
 
@@ -307,13 +311,13 @@
   [local-device-id]
 
   (terminate! local-device-id)
-  (swap! local-devices dissoc local-device-id))
+  (state/dissoc-local-device! local-device-id))
 
 (defn clear-all!
   "Destroy all traces of all local-devices."
   []
   (terminate-all!)
-  (reset! local-devices {}))
+  (state/clear-local-devices!))
 
 (defn save-local-device-backup!
   "Save the device backup on a local file and return the config map."[]
