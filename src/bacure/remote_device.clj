@@ -300,16 +300,6 @@
             (remove :success)
             (#(if (seq %) {:error {:write-properties-errors (vec %)}} {:success true})))))))
 
-
-(defn- get-i-have-event-listener
-  "Responds to IAms from WhoIs requests we send, and adds those remote devices to
-  the local device's cache."
-  [local-device-id]
-
-  (proxy [DeviceEventAdapter] []
-    ))
-
-
 ;; ;; ================================================================
 ;; ;; Maintenance of the remote devices list
 ;; ;; ================================================================
