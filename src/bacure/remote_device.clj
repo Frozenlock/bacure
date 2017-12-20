@@ -3,7 +3,8 @@
             [bacure.coerce.obj :as obj]
             [bacure.local-device :as ld]
             [bacure.read-properties :as rp]
-            [bacure.remote-device :as rd]
+            [bacure.services :as services]
+            [bacure.events :as events]
             [bacure.util :as util])
   (:import (com.serotonin.bacnet4j RemoteDevice
                                    event.DeviceEventAdapter
@@ -11,17 +12,10 @@
                                    service.confirmed.DeleteObjectRequest
                                    service.confirmed.WritePropertyRequest
                                    service.confirmed.WritePropertyMultipleRequest
-                                   service.unconfirmed.WhoIsRequest
-                                   service.unconfirmed.WhoHasRequest
-                                   service.unconfirmed.WhoHasRequest$Limits
                                    exception.BACnetTimeoutException)))
 
-
-
-
-
 (defn rd
-  "Get the remote device by its device-id"
+  "Get the remote device object by its device-id"
   ([device-id] (rd nil device-id))
   ([local-device-id device-id]
    (-> (.getRemoteDeviceBlocking (ld/local-device-object local-device-id) device-id))))
@@ -104,13 +98,7 @@
   be in the local table. To scan a network, use `discover-network'."
   ([] (remote-devices nil))
   ([local-device-id]
-   (if-let [ldo (ld/local-device-object local-device-id)]
-     (let [ld-id (ld/get-local-device-id ldo)]
-       (->> (for [rd (remove nil? (seq (.getRemoteDevices ldo)))]
-              (.getInstanceNumber rd))
-            (remove nil?)
-            (into #{})))
-     (throw (Exception. "Missing local device"))))) ;; into a set to force unique IDs
+   (events/cached-remote-devices local-device-id)))
 
 (defn remote-devices-and-names
   "Return a list of vector pair with the device-id and its name.
@@ -135,50 +123,15 @@
                 (catch Exception e))
           (remote-devices local-device-id)))))
 
+(defn find-remote-device-having-object
+  ([device-id object-identifier]
+   (services/send-who-has nil device-id object-identifier nil))
 
-(defn is-remote-device-in-cache?
-  [local-device-id remote-device-id]
+  ([device-id object-identifier args]
+   (services/send-who-has nil device-id object-identifier args))
 
-  (let [current-remote-devices (remote-devices local-device-id)]
-    (current-remote-devices remote-device-id)))
-
-(defn- add-remote-device-to-cache
-  "Add the remote device to the cache the same way all of BACnet4J's other
-  handlers do it. Unfortunately, BACnet4J doesn't give us any handles with which
-  to do this without going through their automagical RemoteDeviceDiscoverer or
-  RemoteDeviceFinder, which do their own WhoIs calls on top of any WhoIs
-  broadcasts we might want to do ourselves."
-
-  [local-device-id remote-device]
-
-  (let [local-device-object (ld/local-device-object local-device-id)
-        remote-device-id    (.getInstanceNumber remote-device)
-        already-cached?     (is-remote-device-in-cache? local-device-id remote-device-id)
-        cache-policy        (-> local-device-object
-                                (.getCachePolicies)
-                                (.getDevicePolicy remote-device-id))]
-
-    (when-not already-cached?
-      (-> local-device-object
-          (util/private-field "remoteDeviceCache") ;; TODO: ouch.
-          (.putEntity remote-device-id remote-device cache-policy)))))
-
-(defn- get-i-am-event-listener
-  "Responds to IAms from WhoIs requests we send, and adds those remote devices to
-  the local device's cache."
-  [local-device-id]
-
-  (proxy [DeviceEventAdapter] []
-    (iAmReceived [remote-device]
-
-      (add-remote-device-to-cache local-device-id remote-device))))
-
-(defn- add-listener
-  [local-device listener]
-
-  (-> local-device
-      (.getEventHandler)
-      (.addListener listener)))
+  ([local-device-id device-id object-identifier args]
+   (services/send-who-has local-device-id device-id object-identifier args)))
 
 (defn find-remote-devices
   "We find remote devices by sending a 'WhoIs' broadcast. Every device
@@ -188,37 +141,21 @@
   remote device discovery might fail. The use of `discover-network' is
   highly recommended, even if it might take a little longer to
   execute."
-  ([] (find-remote-devices {}))
-  ([{:keys [min-range max-range] :as args}] (find-remote-devices nil args))
-  ([local-device-id {:keys [min-range max-range]}]
-   (let  [local-device (ld/local-device-object local-device-id)
-          i-am-listener (get-i-am-event-listener local-device-id)]
+  ([]
+   (services/send-who-is nil {}))
 
-     (add-listener local-device i-am-listener)
+  ([args]
+   (services/send-who-is nil args))
 
-     (doto local-device
-       (.sendGlobalBroadcast (if (or min-range max-range)
-                               (WhoIsRequest.
-                                (c/clojure->bacnet :unsigned-integer (or min-range 0))
-                                (c/clojure->bacnet :unsigned-integer (or max-range 4194304)))
-                               (WhoIsRequest.))))
-
-     (Thread/sleep 1000) ;wait a little to ensure we get the responses
-     (-> local-device
-         (.getEventHandler)
-         (.removeListener i-am-listener)))))
-
-(defn clear-remote-devices!
-  ([] (clear-remote-devices! nil))
-  ([local-device-id]
-   (doto (ld/local-device-object local-device-id)
-     (.clearRemoteDevices))))
+  ([local-device-id args]
+   (services/send-who-is local-device-id args)))
 
 (defn find-remote-device
   "Send a WhoIs for a single device-id, effectively finding a single
   device. Some devices seem to ignore a general WhoIs broadcast, but
   will answer a WhoIs request specifically for their ID."
   ([id] (find-remote-device nil id))
+
   ([local-device-id remote-device-id]
    (find-remote-devices local-device-id
                         {:min-range remote-device-id :max-range remote-device-id})))
@@ -367,27 +304,6 @@
   (proxy [DeviceEventAdapter] []
     ))
 
-(defn send-who-has
-  ([device-id object-identifier]
-   (send-who-has nil device-id object-identifier nil))
-
-  ([device-id object-identifier config]
-   (send-who-has nil device-id object-identifier config))
-
-  ([local-device-id device-id object-identifier {:keys [min-range max-range]
-                                                 :or   {min-range 0
-                                                        max-range 4194303}
-                                                 :as   config}]
-
-   (let [local-device      (ld/local-device-object local-device-id)
-         min-range         (c/clojure->bacnet :unsigned-integer min-range)
-         max-range         (c/clojure->bacnet :unsigned-integer max-range)
-         object-identifier (c/clojure->bacnet :object-identifier object-identifier)
-         limits            (WhoHasRequest$Limits. min-range max-range)
-         request           (WhoHasRequest. limits object-identifier)]
-
-     (doto local-device (.sendGlobalBroadcast request)
-           ))))
 
 ;; ;; ================================================================
 ;; ;; Maintenance of the remote devices list
