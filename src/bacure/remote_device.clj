@@ -4,8 +4,7 @@
             [bacure.local-device :as ld]
             [bacure.read-properties :as rp]
             [bacure.services :as services]
-            [bacure.events :as events]
-            [bacure.util :as util])
+            [bacure.events :as events])
   (:import (com.serotonin.bacnet4j RemoteDevice
                                    event.DeviceEventAdapter
                                    service.confirmed.CreateObjectRequest
