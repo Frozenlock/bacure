@@ -17,15 +17,21 @@
                             (WhoIsRequest.)))))
 
 (defn send-who-has
-  [local-device-id object-identifier
+  [local-device-id object-identifier-or-name
    {:keys [min-range max-range] :or {min-range 0 max-range 4194303}
     :as   args}]
 
-  (let [local-device      (ld/local-device-object local-device-id)
-        min-range         (c/clojure->bacnet :unsigned-integer min-range)
-        max-range         (c/clojure->bacnet :unsigned-integer max-range)
-        object-identifier (c/clojure->bacnet :object-identifier object-identifier)
-        limits            (WhoHasRequest$Limits. min-range max-range)
-        request           (WhoHasRequest. limits object-identifier)]
+  (let [local-device   (ld/local-device-object local-device-id)
+        min-range      (c/clojure->bacnet :unsigned-integer min-range)
+        max-range      (c/clojure->bacnet :unsigned-integer max-range)
+        object-id-type (if (string? object-identifier-or-name)
+                         :character-string
+                         :object-identifier)
+
+        object-identifier-or-name (c/clojure->bacnet object-id-type
+                                                     object-identifier-or-name)
+
+        limits  (WhoHasRequest$Limits. min-range max-range)
+        request (WhoHasRequest. limits object-identifier-or-name)]
 
     (doto local-device (.sendGlobalBroadcast request))))
