@@ -52,7 +52,6 @@
                                     (do
                                       (state/set-request-response! ack-APDU-error)
                                       (some-> (.getError ack-APDU-error)
-                                              (.getError)
                                               (c/bacnet->clojure)))))))
     (ex [this bacnet-exception]
       (deliver return-promise {:timeout {:timeout-error bacnet-exception}})

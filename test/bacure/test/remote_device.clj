@@ -2,12 +2,15 @@
   (:use clojure.test)
   (:require [bacure.local-device :as ld]
             [bacure.read-properties :as rp]
-            [bacure.remote-device :as rd]))
+            [bacure.remote-device :as rd]
+            [bacure.network :as net]))
 
 
 (defn init-test-local-device! [local-device-id]
   ;; adjust the broadcast-address as needed.
-  (ld/new-local-device! {:device-id local-device-id :broadcast-address "192.168.0.255"})
+  (ld/new-local-device! {:device-id local-device-id :broadcast-address
+                         (-> (net/get-any-ip)
+                             (net/get-broadcast-address))})
   (ld/initialize! local-device-id))
 
 

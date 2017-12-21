@@ -34,10 +34,9 @@
 
 
 ;; we store all the local devices with their device-id as the key.
-(def local-devices state/local-devices)
 
 (defn list-local-devices []
-  (keys @local-devices))
+  (keys @state/local-devices))
 
 (defn get-local-device
   "Return the local-device associated with the device-id. If device-id
@@ -50,7 +49,7 @@
   "Return the local-device bacnet4j object associated with the
   device-id. If device-id is nil, simply return the first found."
   [device-id]
-  (state/get-local-device-property device-id :bacnet4j-local-device))
+  (state/get-in-local-device device-id [:bacnet4j-local-device]))
 
 
 (defn default-transport [network]
@@ -223,8 +222,7 @@
          (try (save/load-program)  ;; Anything in the program will be executed.
               (catch Exception e (println (str "Uh oh... couldn't load the local device program:\n"
                                                (.getMessage e)))))
-         ;; always start the remote device discoverer
-         (.startRemoteDeviceDiscovery ldo)
+
          ;; return true if we are bound to the port
          port-bind)))))
 
@@ -264,7 +262,7 @@
                                    :when (.isInitialized (local-device-object id#))] id#))]
      (terminate-all!)
      (let [result# (atom nil)]
-       (with-redefs [local-devices (atom {})]
+       (with-redefs [state/local-devices (atom {})]
          (try (reset! result# (do ~@body))
               (catch Exception e#
                 (println (str "Error: " (.getMessage e#))))
