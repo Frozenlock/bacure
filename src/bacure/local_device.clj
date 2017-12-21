@@ -223,8 +223,7 @@
          (try (save/load-program)  ;; Anything in the program will be executed.
               (catch Exception e (println (str "Uh oh... couldn't load the local device program:\n"
                                                (.getMessage e)))))
-         ;; always start the remote device discoverer
-         (.startRemoteDeviceDiscovery ldo)
+
          ;; return true if we are bound to the port
          port-bind)))))
 
