@@ -2,21 +2,20 @@
   (:require [bacure.coerce :as c]
             [bacure.coerce.obj :as obj]
             [bacure.local-device :as ld]
-            [bacure.read-properties :as rp]))
-
-
-(import '(com.serotonin.bacnet4j
-          RemoteDevice
-          service.confirmed.CreateObjectRequest
-          service.confirmed.DeleteObjectRequest
-          service.confirmed.WritePropertyRequest
-          service.confirmed.WritePropertyMultipleRequest
-          service.unconfirmed.WhoIsRequest
-          exception.BACnetTimeoutException))
-
+            [bacure.read-properties :as rp]
+            [bacure.services :as services]
+            [bacure.events :as events]
+            [bacure.util :as util])
+  (:import (com.serotonin.bacnet4j RemoteDevice
+                                   event.DeviceEventAdapter
+                                   service.confirmed.CreateObjectRequest
+                                   service.confirmed.DeleteObjectRequest
+                                   service.confirmed.WritePropertyRequest
+                                   service.confirmed.WritePropertyMultipleRequest
+                                   exception.BACnetTimeoutException)))
 
 (defn rd
-  "Get the remote device by its device-id"
+  "Get the remote device object by its device-id"
   ([device-id] (rd nil device-id))
   ([local-device-id device-id]
    (-> (.getRemoteDeviceBlocking (ld/local-device-object local-device-id) device-id))))
@@ -99,13 +98,7 @@
   be in the local table. To scan a network, use `discover-network'."
   ([] (remote-devices nil))
   ([local-device-id]
-   (if-let [ldo (ld/local-device-object local-device-id)]
-     (let [ld-id (ld/get-local-device-id ldo)]
-       (->> (for [rd (remove nil? (seq (.getRemoteDevices ldo)))]
-              (.getInstanceNumber rd))
-            (remove nil?)
-            (into #{})))
-     (throw (Exception. "Missing local device"))))) ;; into a set to force unique IDs
+   (events/cached-remote-devices local-device-id)))
 
 (defn remote-devices-and-names
   "Return a list of vector pair with the device-id and its name.
@@ -130,6 +123,17 @@
                 (catch Exception e))
           (remote-devices local-device-id)))))
 
+(defn find-remote-device-having-object
+  ([object-identifier]
+   (find-remote-device-having-object nil object-identifier nil))
+
+  ([object-identifier args]
+   (find-remote-device-having-object nil object-identifier args))
+
+  ([local-device-id object-identifier args]
+   (services/send-who-has local-device-id object-identifier args)
+   (Thread/sleep 1000)
+   (events/cached-remote-objects local-device-id)))
 
 (defn find-remote-devices
   "We find remote devices by sending a 'WhoIs' broadcast. Every device
@@ -139,21 +143,23 @@
   remote device discovery might fail. The use of `discover-network' is
   highly recommended, even if it might take a little longer to
   execute."
-  ([] (find-remote-devices {}))
-  ([{:keys [min-range max-range] :as args}] (find-remote-devices nil args))
-  ([local-device-id {:keys [min-range max-range]}]
-   (.sendGlobalBroadcast (ld/local-device-object local-device-id)
-                         (if (or min-range max-range)
-                           (WhoIsRequest.
-                            (c/clojure->bacnet :unsigned-integer (or min-range 0))
-                            (c/clojure->bacnet :unsigned-integer (or max-range 4194304)))
-                           (WhoIsRequest.)))))
+  ([]
+   (find-remote-devices nil {}))
+
+  ([args]
+   (find-remote-devices nil args))
+
+  ([local-device-id args]
+   (services/send-who-is local-device-id args)
+   (Thread/sleep 1000)
+   (events/cached-remote-devices local-device-id)))
 
 (defn find-remote-device
   "Send a WhoIs for a single device-id, effectively finding a single
   device. Some devices seem to ignore a general WhoIs broadcast, but
   will answer a WhoIs request specifically for their ID."
   ([id] (find-remote-device nil id))
+
   ([local-device-id remote-device-id]
    (find-remote-devices local-device-id
                         {:min-range remote-device-id :max-range remote-device-id})))
@@ -169,7 +175,6 @@
 
   ([local-device-id {:keys [min-range max-range dest-port] :as args}]
    (find-remote-devices local-device-id args)
-   (Thread/sleep 1000) ;wait a little to insure we get the responses
    (all-extended-information local-device-id)
    (remote-devices local-device-id)))
 
@@ -185,6 +190,7 @@
   ([] (discover-network nil))
   ([local-device-id] (discover-network local-device-id 5))
   ([local-device-id tries]
+   (events/clear-cached-remote-devices!)
    (dorun
     (->> (repeatedly tries #(find-remote-devices-and-extended-information local-device-id {}))
          (take-while empty?)))
@@ -293,8 +299,6 @@
        (->> (mapcat set-object-props! write-access-specificiations)
             (remove :success)
             (#(if (seq %) {:error {:write-properties-errors (vec %)}} {:success true})))))))
-
-
 
 ;; ;; ================================================================
 ;; ;; Maintenance of the remote devices list

@@ -3,20 +3,21 @@
   (:require [bacure.coerce :as c]
             [bacure.coerce.obj :as co]
             [bacure.coerce.service.acknowledgement]
-            [bacure.local-device :as ld]))
+            [bacure.local-device :as ld]
+            [bacure.state :as state]))
 
-(import (com.serotonin.bacnet4j 
-          service.confirmed.ReadPropertyRequest
-          service.confirmed.ReadPropertyMultipleRequest
-          type.constructed.ReadAccessSpecification
-          type.enumerated.AbortReason
-          type.enumerated.ErrorCode
-          util.PropertyValues
-          util.PropertyReferences
-          exception.AbortAPDUException
-          exception.ErrorAPDUException
-          exception.ServiceTooBigException
-          ResponseConsumer))
+(import (com.serotonin.bacnet4j
+         service.confirmed.ReadPropertyRequest
+         service.confirmed.ReadPropertyMultipleRequest
+         type.constructed.ReadAccessSpecification
+         type.enumerated.AbortReason
+         type.enumerated.ErrorCode
+         util.PropertyValues
+         util.PropertyReferences
+         exception.AbortAPDUException
+         exception.ErrorAPDUException
+         exception.ServiceTooBigException
+         ResponseConsumer))
 
 
 
@@ -27,33 +28,31 @@
 ;;; requests. The user can use parallel functions like `pmap' if he
 ;;; wants to send multiple requests at the same time.
 
-(def aaa (atom nil)) ;; debugs
-
 (defn make-response-consumer [return-promise]
   (reify ResponseConsumer
     (success [this ackowledgement-service]
-      (deliver return-promise {:success (do (reset! aaa ackowledgement-service)
+      (deliver return-promise {:success (do (state/set-request-response! ackowledgement-service)
                                             (or (c/bacnet->clojure ackowledgement-service) true))}))
     (fail [this ack-APDU-error]
-      (deliver return-promise (or (cond 
+      (deliver return-promise (or (cond
                                     (= com.serotonin.bacnet4j.apdu.Abort (class ack-APDU-error))
                                     {:abort (let [reason (.getAbortReason ack-APDU-error)]
-                                              (reset! aaa ack-APDU-error)
+                                              (state/set-request-response! ack-APDU-error)
                                               {:abort-reason (->> reason
                                                                   (c/clojure->bacnet :abort-reason)
                                                                   (c/bacnet->clojure))
                                                :apdu-error ack-APDU-error})}
                                     (= com.serotonin.bacnet4j.apdu.Reject (class ack-APDU-error))
                                     {:reject (let [reason (.getRejectReason ack-APDU-error)]
-                                               (reset! aaa ack-APDU-error)
+                                               (state/set-request-response! ack-APDU-error)
                                                {:reject-reason (c/bacnet->clojure reason)
                                                 :apdu-error ack-APDU-error
                                                 })}
                                     :else
                                     (do
-                                      (reset! aaa ack-APDU-error)
+                                      (state/set-request-response! ack-APDU-error)
                                       (some-> (.getError ack-APDU-error)
-                                              (.getError) 
+                                              (.getError)
                                               (c/bacnet->clojure)))))))
     (ex [this bacnet-exception]
       (deliver return-promise {:timeout {:timeout-error bacnet-exception}})
@@ -63,7 +62,7 @@
 (defn send-request-promise
   "Send the request to the remote device.
   The possible return values are :
-  
+
   {:success <expected valuezs - if any>
    :error {:error-class ..., :error-code ...}}
 
@@ -73,10 +72,10 @@
    (let [local-device (ld/local-device-object local-device-id)
          return-promise (promise)
          timeout (:apdu-timeout (ld/get-configs local-device-id))
-         bacnet4j-future (if (.isInitialized local-device) 
+         bacnet4j-future (if (.isInitialized local-device)
                            (.send local-device
                                   (.getRemoteDeviceBlocking local-device device-id) request
-                                  (make-response-consumer return-promise))                           
+                                  (make-response-consumer return-promise))
                            (throw (Exception. "Can't send request while the device isn't initialized.")))]
      ;; bacnet4j seems a little icky when dealing with timeouts...
      ;; better handling it ourself.
@@ -115,17 +114,17 @@
   "Ask the remote device what is the length of the BACnet array and
   return as many object-property-identifiers. If object is not an
   array (or any other error), return nil.
-  
-  An array length can be provided to avoid a request to a remote device."   
+
+  An array length can be provided to avoid a request to a remote device."
   ([local-device-id device-id object-identifier property-reference]
-      (let [read-result (read-single-property local-device-id 
-                                              device-id 
-                                              object-identifier
-                                              [property-reference 0])]
-        (if-let [size (:success read-result)]
-          (expand-array local-device-id device-id object-identifier property-reference size)
-          (do (println (str "Couldn't retrieve array length : " read-result))
-              nil))))
+   (let [read-result (read-single-property local-device-id
+                                           device-id
+                                           object-identifier
+                                           [property-reference 0])]
+     (if-let [size (:success read-result)]
+       (expand-array local-device-id device-id object-identifier property-reference size)
+       (do (println (str "Couldn't retrieve array length : " read-result))
+           nil))))
   ([local-device-id device-id object-identifier property-reference size]
    (into []
          (for [index (range 1 (inc size))]
@@ -136,8 +135,8 @@
   afterward." [local-device-id device-id object-identifier property-reference]
   (mapv (partial apply (partial read-single-property local-device-id device-id))
         (expand-array local-device-id device-id object-identifier property-reference)))
-      
-(defn size-related? 
+
+(defn size-related?
   "True if the abort reason is size related."
   [abort-map]
   (some #{(or (:abort-reason abort-map)
@@ -148,16 +147,16 @@
   "Read a single property. If there's a size-related APDU error, will
   try to read the BACnet arrays one item at the time."
   [local-device-id device-id object-identifier property-reference]
-    
-  (try 
+
+  (try
     (let [read-result (read-single-property local-device-id device-id object-identifier property-reference)]
       (cond
         (:success read-result) read-result
 
         ;;;;;
         (or (:abort read-result)
-            (:reject read-result)) 
-        
+            (:reject read-result))
+
         (if (size-related? (or (:abort read-result) (:reject read-result)))
           (mapv (fn [result]
                   (or (get result :success)
@@ -234,7 +233,7 @@
   [local-device-id device-id obj-prop-references]
   (let [max-refs (find-max-refs local-device-id device-id)]
     (partition-all max-refs obj-prop-references)))
-  
+
 (defn read-property-multiple-request
   "Create a read-property-multiple request.
    [[object-identifier property-references]
@@ -254,15 +253,15 @@
   ;; we partition the object-property-references to be compatible with
   ;; the remote device MaxReadMultipleReferences
   (let [results (for [refs (partition-object-property-references
-                                local-device-id device-id obj-prop-references)]
-                      (->> (read-property-multiple-request refs)
-                           (send-request-promise local-device-id device-id)))]
+                            local-device-id device-id obj-prop-references)]
+                  (->> (read-property-multiple-request refs)
+                       (send-request-promise local-device-id device-id)))]
     ;; the remote device might send an error for the entire
     ;; read-property-multiple request, even if only ONE object is
     ;; problematic (example error: :unkown-object). This means that we
     ;; can't know what is the cause of this error just by the request
     ;; response.
-    
+
     ;; If ANY of the partitioned requests return an error or a failure,
     ;; just drop the entire thing. We can use higher order function to
     ;; send request individually and pinpoint the cause.
@@ -290,7 +289,7 @@
 (declare read-property-multiple)
 
 
-(defn assemble-results 
+(defn assemble-results
   "For each object-identifier, check if a property is present is
   present more than once. If it is, we are most probably dealing with
   a segmented array... just concat them together."
@@ -314,7 +313,7 @@
 ;;        (remove nil?)
 ;;        (apply (fn [& results]
 ;;                 (let [oid (:object-identifier (first results))]
-;;                   (assoc 
+;;                   (assoc
 ;;                    (apply (partial merge-with concat)
 ;;                           (map #(dissoc % :object-identifier) results))
 ;;                    :object-identifier oid))))))
@@ -348,20 +347,20 @@
     (concat [oid] (map last oid-props))))
 
 (defn replace-special-identifier
-  "For devices that don't support the special identifiers 
+  "For devices that don't support the special identifiers
    (i.e. :all, :required and :optional), return a list of properties.
 
    The :all won't be as the one defined by the BACnet standard,
    because we can't know for sure what are the properties. (Especially
    in the case of proprietary objects.)" [object-property-references]
-   (for [single-object-property-references object-property-references]
-     (let [[object-identifier & properties] single-object-property-references
-           f (fn [x] (if (#{:all :required :optional} x)
-                       (co/properties-by-option (first object-identifier) x) [x]))]
-       (cons object-identifier
-             (distinct (for [prop properties new-prop (f prop)] new-prop))))))
+  (for [single-object-property-references object-property-references]
+    (let [[object-identifier & properties] single-object-property-references
+          f (fn [x] (if (#{:all :required :optional} x)
+                      (co/properties-by-option (first object-identifier) x) [x]))]
+      (cons object-identifier
+            (distinct (for [prop properties new-prop (f prop)] new-prop))))))
 
-(defn when-coll 
+(defn when-coll
   "Apply function 'f' to coll only if it really is a collection.
    Return nil otherwise."
   [coll f]
@@ -374,13 +373,13 @@
 ;; Might be wise to correct that.
 (defn is-expanded-array?
   "Return true if the object-property-references is an expanded array
-   Example : 
+   Example :
    [[[:device 123] [:object-list 1]]
-    [[:device 123] [:object-list 2]]]" 
+    [[:device 123] [:object-list 2]]]"
   [opr]
   (let [properties (map #(some-> %
-                                (when-coll last)
-                                (when-coll first)) opr)
+                                 (when-coll last)
+                                 (when-coll first)) opr)
         obj-id (map #(some-> % (when-coll first)) opr)]
     (and (apply = properties) ;; same property
          (apply = obj-id) ;; same object
@@ -418,22 +417,22 @@
                replace-special-identifier
                expand-obj-prop-ref
                (read-individually local-device-id device-id))
-          
+
 
           ;; size related for a single object.
           (and
            (size-related? (or (:abort read-result) (:reject read-result)))
            (= (count obj-prop-references) 1) ;; single property
            (not expanded-array?)) ;; not an array index
-          
+
           (do (println "Error for : " (first obj-prop-references)
                        (size-related? (or (:abort read-result) (:reject read-result))))
               (println "Trying to read as an array (in chunks).")
-              (reset! aaa read-result)
+              (state/set-request-response! read-result)
               (let [expanded-array (apply (partial expand-array local-device-id device-id)
                                           (first obj-prop-references))]
                 (read-array-in-chunks local-device-id device-id expanded-array)))
-          
+
 
           ;; size related multiple objects or multiple properties
           (or (:split-opr read-result)
@@ -441,7 +440,7 @@
               (and (size-related? (or (:abort read-result) (:reject read-result)))
                    (or (> (count obj-prop-references) 1) ;; too many objects
                        (> (count (first obj-prop-references)) 2)))) ;; too many properties
-          
+
           ;; try to split into smaller read requests
           ;; (still multiple properties per request)
           (let [expand? (and (not (:split-opr read-result))
@@ -449,8 +448,8 @@
                              (> (count (first obj-prop-references)) 2))]
             ;; we should expand if we have a single object but too
             ;; many properties.
-            (->> (for [opr (split-opr (if expand? 
-                                        (expand-obj-prop-ref obj-prop-references) 
+            (->> (for [opr (split-opr (if expand?
+                                        (expand-obj-prop-ref obj-prop-references)
                                         obj-prop-references))]
                    (read-property-multiple local-device-id device-id opr))
                  assemble-results))
@@ -459,8 +458,8 @@
           (:timeout read-result)
           (throw (or (some-> read-result :timeout :timeout-error)
                      (Exception. "Timeout")))
-          
-          
+
+
           :else (do (println "Read-property-multiple error.")
                     (println obj-prop-references)
                     read-result))))))
@@ -485,7 +484,7 @@
   The result will be a collection of objects properties map.
 
   Example:
- 
+
   ({:object-identifier [analog-input 1], :present-value 12.23}
    {:object-identifier [analog-input 2], :present-value 24.53, object-name \"Analog Input 2\"})"
   ([device-id object-property-references]
@@ -530,11 +529,11 @@
 
 (defn read-range-request-by [reference range & by-what]
   (condp = (first by-what)
-    :sequence (ReadRangeRequest$BySequenceNumber. (c/clojure->bacnet :unsigned-integer reference) 
+    :sequence (ReadRangeRequest$BySequenceNumber. (c/clojure->bacnet :unsigned-integer reference)
                                                   (c/clojure->bacnet :signed-integer range))
     :time (ReadRangeRequest$ByTime. (c/clojure->bacnet :date-time reference)
                                     (c/clojure->bacnet :signed-integer range))
-    (ReadRangeRequest$ByPosition. (c/clojure->bacnet :unsigned-integer reference) 
+    (ReadRangeRequest$ByPosition. (c/clojure->bacnet :unsigned-integer reference)
                                   (c/clojure->bacnet :signed-integer range)))) ;;default to :position
 
 
@@ -548,12 +547,9 @@
    (c/clojure->bacnet :unsigned-integer array-index)
    (read-range-request-by reference range (first by-what?))))
 
-(defn read-range 
+(defn read-range
   "'by-what?' can be :sequence, :time, or position (the default if
   none is provided)."
   [local-device-id device-id object-identifier property-identifier array-index [reference range] & by-what?]
   (->> (read-range-request object-identifier property-identifier array-index [reference range] by-what?)
        (send-request-promise local-device-id device-id)))
-
-
-   

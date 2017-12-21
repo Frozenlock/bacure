@@ -2,15 +2,22 @@
   (:require [bacure.coerce :as c :refer [bacnet->clojure clojure->bacnet]]
             [bacure.coerce.type.primitive :as p]
             [bacure.coerce.type.enumerated :as e])
-  (:import [com.serotonin.bacnet4j.obj
-            ObjectProperties
-            BACnetObject
-            PropertyTypeDefinition
-            ObjectPropertyTypeDefinition]))
+  (:import com.serotonin.bacnet4j.RemoteObject
+           (com.serotonin.bacnet4j.obj ObjectProperties
+                                       BACnetObject
+                                       PropertyTypeDefinition
+                                       ObjectPropertyTypeDefinition)))
 
 
 
 ;; we only go to clojure... no need to do a clojure->bacnet method
+(defmethod bacnet->clojure RemoteObject
+  [^RemoteObject o]
+
+  {:object-identifier (-> (.getObjectIdentifier o)
+                          bacnet->clojure)
+   :object-name (-> (.getObjectName o)
+                    bacnet->clojure)})
 
 (defmethod bacnet->clojure PropertyTypeDefinition
   [^PropertyTypeDefinition o]
@@ -36,7 +43,7 @@
 
 (defn property-type-definitions
   "Given an object type, return the properties it should have, and if
-   they are :required, :optional, or :sequence." 
+   they are :required, :optional, or :sequence."
   [object-type]
   (->> (ObjectProperties/getObjectPropertyTypeDefinitions
         (clojure->bacnet :object-type object-type))
@@ -61,18 +68,18 @@
          property-identifier
          (c/int-to-keyword e/property-identifier-map property-identifier))))
 
-(defn get-object-type 
+(defn get-object-type
   "Find the object type in an object-map (either from
   the :object-type, or in the :object-identifier)."
   [obj-map]
-  (or (:object-type obj-map) 
+  (or (:object-type obj-map)
       (first (:object-identifier obj-map))))
 
 (defn force-type
   "Associate the value with a specific type. Use only before
   encoding.
-  
-  Ex: {:some-property (force-type \"some-value\" :character-string)}" 
+
+  Ex: {:some-property (force-type \"some-value\" :character-string)}"
   [value type-keyword]
   {::forced-type type-keyword
    :value value})
@@ -80,7 +87,7 @@
 (defn encode-property-value
   "Encode the property value depending on what type it should be given
   the object.
-  
+
   A type can be specified when required (proprietary properties) by
   using the function `force-type'."
   [object-type property-identifier value]
@@ -90,11 +97,11 @@
         type-keyword (or forced-type (:type value-type))
         encode-fn (partial clojure->bacnet type-keyword)
         naked-value (if forced-type (:value value) value)]
-    (if-not type-keyword 
-      (throw 
-       (Exception. 
+    (if-not type-keyword
+      (throw
+       (Exception.
         (str "Couldn't find the type associated with property '"
-             property-identifier 
+             property-identifier
              "'. You can try to use the function `bacure.coerce.obj/force-type'."))) )
     (if (:sequence value-type)
       (do (if-not (coll? naked-value)
