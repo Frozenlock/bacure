@@ -34,10 +34,9 @@
 
 
 ;; we store all the local devices with their device-id as the key.
-(def local-devices state/local-devices)
 
 (defn list-local-devices []
-  (keys @local-devices))
+  (keys @state/local-devices))
 
 (defn get-local-device
   "Return the local-device associated with the device-id. If device-id
@@ -263,7 +262,7 @@
                                    :when (.isInitialized (local-device-object id#))] id#))]
      (terminate-all!)
      (let [result# (atom nil)]
-       (with-redefs [local-devices (atom {})]
+       (with-redefs [state/local-devices (atom {})]
          (try (reset! result# (do ~@body))
               (catch Exception e#
                 (println (str "Error: " (.getMessage e#))))
