@@ -122,17 +122,43 @@
                 (catch Exception e))
           (remote-devices local-device-id)))))
 
-(defn find-remote-device-having-object
-  ([object-identifier]
-   (find-remote-device-having-object nil object-identifier nil))
+(defn- remote-object-matches?
+  [[object-identifier remote-object] object-identifier-or-name]
 
-  ([object-identifier args]
-   (find-remote-device-having-object nil object-identifier args))
+  (or (= object-identifier object-identifier-or-name)
+      (= (:object-name remote-object) object-identifier-or-name)))
 
-  ([local-device-id object-identifier args]
-   (services/send-who-has local-device-id object-identifier args)
+(defn- remote-device-has-object?
+  [cached-remote-device-object object-identifier-or-name]
+
+  (some true? (map #(remote-object-matches? % object-identifier-or-name)
+                   cached-remote-device-object)))
+
+(defn get-remote-devices-having-object
+  "Query our cached remote-objects to see which remote-devices have the
+  specified object (if any)"
+  [local-device-id object-identifier-or-name]
+
+  (->> (events/cached-remote-objects local-device-id)
+       (filter #(remote-device-has-object? (second %) object-identifier-or-name))
+       keys
+       (into #{})))
+
+(defn find-remote-devices-having-object
+  "Do a Who-Has and return the remote-device-ids of any remote devices that
+  respond. The Who-Has updates a cache that can be accessed at
+  bacure.events/cached-remote-objects, and that is the same cache we query
+  here."
+  ([object-identifier-or-name]
+   (find-remote-devices-having-object nil object-identifier-or-name nil))
+
+  ([object-identifier-or-name args]
+   (find-remote-devices-having-object nil object-identifier-or-name args))
+
+  ([local-device-id object-identifier-or-name args]
+   (services/send-who-has local-device-id object-identifier-or-name args)
    (Thread/sleep 1000)
-   (events/cached-remote-objects local-device-id)))
+   (get-remote-devices-having-object local-device-id object-identifier-or-name)))
 
 (defn find-remote-devices
   "We find remote devices by sending a 'WhoIs' broadcast. Every device
@@ -189,7 +215,6 @@
   ([] (discover-network nil))
   ([local-device-id] (discover-network local-device-id 5))
   ([local-device-id tries]
-   ;(events/clear-cached-remote-devices!)
    (dorun
     (->> (repeatedly tries #(find-remote-devices-and-extended-information local-device-id {}))
          (take-while empty?)))
