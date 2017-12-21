@@ -8,25 +8,25 @@
   ([] (cached-remote-devices nil))
 
   ([local-device-id]
-   (state/get-local-device-property local-device-id :remote-devices)))
+   (state/get-in-local-device local-device-id [:remote-devices])))
 
 (defn cached-remote-objects
   ([] (cached-remote-objects nil))
 
   ([local-device-id]
-   (state/get-local-device-property local-device-id :remote-objects)))
+   (state/get-in-local-device local-device-id [:remote-objects])))
 
 (defn clear-cached-remote-devices!
   ([] (clear-cached-remote-devices! nil))
 
   ([local-device-id]
-   (state/assoc-in-local-device! local-device-id :remote-devices #{})))
+   (state/assoc-in-local-device! local-device-id [:remote-devices] #{})))
 
 (defn clear-cached-remote-objects!
   ([] (clear-cached-remote-objects! nil))
 
   ([local-device-id]
-   (state/assoc-in-local-device! local-device-id :remote-objects {})))
+   (state/assoc-in-local-device! local-device-id [:remote-objects] {})))
 
 ;; Event handlers
 (defn- add-remote-device-to-cache!
@@ -36,7 +36,7 @@
         remote-devices   (-> (cached-remote-devices local-device-id)
                              (conj remote-device-id))]
 
-    (state/assoc-in-local-device! local-device-id :remote-devices remote-devices)))
+    (state/assoc-in-local-device! local-device-id [:remote-devices] remote-devices)))
 
 (defn- add-remote-object-to-cache!
   [local-device-id remote-device remote-object]

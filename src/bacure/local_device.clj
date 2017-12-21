@@ -50,7 +50,7 @@
   "Return the local-device bacnet4j object associated with the
   device-id. If device-id is nil, simply return the first found."
   [device-id]
-  (state/get-local-device-property device-id :bacnet4j-local-device))
+  (state/get-in-local-device device-id [:bacnet4j-local-device]))
 
 
 (defn default-transport [network]
