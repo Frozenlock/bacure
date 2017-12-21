@@ -215,7 +215,6 @@
   ([] (discover-network nil))
   ([local-device-id] (discover-network local-device-id 5))
   ([local-device-id tries]
-                                        ;(events/clear-cached-remote-devices!)
    (dorun
     (->> (repeatedly tries #(find-remote-devices-and-extended-information local-device-id {}))
          (take-while empty?)))
