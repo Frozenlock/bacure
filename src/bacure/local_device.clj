@@ -356,5 +356,5 @@
    (-> (local-device-object local-device-id)
        (.setCommunicationControl (c/clojure->bacnet :enable-disable state) minutes))))
 
-(def disable-communications! (partial set-communication-state! false))
-(def enable-communications! (partial set-communication-state! true))
+(def disable-communications! (partial set-communication-state! :disable))
+(def enable-communications! (partial set-communication-state! :enable))
