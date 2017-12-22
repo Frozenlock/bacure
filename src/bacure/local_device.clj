@@ -174,16 +174,31 @@
   on another network. Will block until the registration is completed
   or the request times out.
 
+  The time-to-live is the time after which we should be removed from
+  the foreign device table (if we don't re-register).
+
+  Re-registration are handled automatically.
+
   Throws a BACnet exception if timeout, a NAK is received, the device
   is already registered or if the request couldn't be sent."
-  ([target-ip-or-hostname target-port]
-   (register-as-foreign-device nil target-ip-or-hostname target-port))
+  ([target-ip-or-hostname target-port time-to-live]
+   (register-as-foreign-device nil target-ip-or-hostname target-port time-to-live))
   
-  ([local-device-id target-ip-or-hostname target-port]
+  ([local-device-id target-ip-or-hostname target-port time-to-live]
    (some-> (state/get-in-local-device local-device-id [:bacnet4j-local-device])
            (.getNetwork)
            (.registerAsForeignDevice
-            (java.net.InetSocketAddress. target-ip-or-hostname target-port)))))
+            (java.net.InetSocketAddress. target-ip-or-hostname target-port) time-to-live))))
+
+(defn unregister-as-foreign-device
+  "Unregister as a foreign device. Should be done automatically when
+  terminating a local device."
+  ([] (unregister-as-foreign-device nil))
+
+  ([local-device-id]
+   (some-> (state/get-in-local-device local-device-id [:bacnet4j-local-device])
+           (.getNetwork)
+           (.unregisterAsForeignDevice))))
 
 
 (defn i-am-broadcast!
