@@ -312,3 +312,15 @@
   ([local-device-id] (load-local-device-backup! local-device-id nil))
   ([local-device-id new-configs]
    (reset-local-device! (merge (save/get-configs) new-configs))))
+
+(defn- set-communication-state!
+  ([state] (set-communication-state! state nil 1))
+
+  ([state minutes] (set-communication-state! state nil minutes))
+
+  ([state local-device-id minutes]
+   (-> (local-device-object local-device-id)
+       (.setCommunicationControl (c/clojure->bacnet :enable-disable state) minutes))))
+
+(def disable-communications! (partial set-communication-state! false))
+(def enable-communications! (partial set-communication-state! true))
