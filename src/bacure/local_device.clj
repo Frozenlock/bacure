@@ -12,7 +12,8 @@
   (:import (com.serotonin.bacnet4j LocalDevice
                                    obj.BACnetObject
                                    npdu.ip.IpNetwork
-                                   transport.DefaultTransport)))
+                                   transport.DefaultTransport)
+           (java.net InetSocketAddress)))
 
 
 
@@ -185,6 +186,23 @@
      device-id)))
 
 ;;;;;;
+
+(defn register-as-foreign-device
+  "Register the local device as a foreign device in a device located
+  on another network. Will block until the registration is completed
+  or the request times out.
+
+  Throws a BACnet exception if timeout, a NAK is received, the device
+  is already registered or if the request couldn't be sent."
+  ([target-ip-or-hostname target-port]
+   (register-as-foreign-device nil target-ip-or-hostname target-port))
+  
+  ([local-device-id target-ip-or-hostname target-port]
+   (some-> (state/get-in-local-device local-device-id [:bacnet4j-local-device])
+           (.getNetwork)
+           (.registerAsForeignDevice
+            (java.net.InetSocketAddress. target-ip-or-hostname target-port)))))
+
 
 (defn i-am-broadcast!
   "Send an 'I am' broadcast on the network."
