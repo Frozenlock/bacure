@@ -145,8 +145,8 @@
   "Return a new configured BACnet local device . (A device is required
   to communicate over the BACnet network.). Use the function
   'initialize' and 'terminate' to bind and unbind the device to the
-  BACnet port. If needed, the initial configurations are available in
-  the atom 'local-device-configs.
+  BACnet port. If needed, the initial configurations are associated
+  with the keyword :init-configs inside the local-device map.'
 
   See README for more information about how to specify configs-map."
   ([] (new-local-device! nil))
