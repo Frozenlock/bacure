@@ -98,3 +98,21 @@
         request (WhoHasRequest. limits object-identifier-or-name)]
 
     (doto local-device (.sendGlobalBroadcast request))))
+
+(defn send-subscribe-cov
+  [local-device-id remote-device-id object-identifier
+   {:keys [process-identifier confirmed? lifetime-seconds]
+    :or   {process-identifier events/default-cov-process-id
+           confirmed?         false
+           lifetime-seconds   60}
+    :as   args}]
+
+  (let [process-identifier (c/clojure->bacnet :unsigned-integer process-identifier)
+        object-identifier  (c/clojure->bacnet :object-identifier object-identifier)
+        confirmed?         (c/clojure->bacnet :boolean confirmed?)
+        lifetime-seconds   (c/clojure->bacnet :unsigned-integer lifetime-seconds)
+
+        request (SubscribeCOVRequest. process-identifier object-identifier confirmed?
+                                      lifetime-seconds)]
+
+    (send-request-promise local-device-id remote-device-id request)))

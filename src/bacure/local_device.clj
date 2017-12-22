@@ -157,6 +157,7 @@
                                  :serial-connection serial-connection
                                  :remote-devices #{}
                                  :remote-objects {}
+                                 :cov-events {}
                                  :init-configs (merge configs
                                                       {:device-id device-id
                                                        :broadcast-address broadcast-address
