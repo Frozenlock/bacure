@@ -4,86 +4,19 @@
             [bacure.coerce.obj :as co]
             [bacure.coerce.service.acknowledgement]
             [bacure.local-device :as ld]
-            [bacure.state :as state]))
+            [bacure.state :as state]
+            [bacure.services :as services]))
 
-(import (com.serotonin.bacnet4j
-         service.confirmed.ReadPropertyRequest
-         service.confirmed.ReadPropertyMultipleRequest
-         type.constructed.ReadAccessSpecification
-         type.enumerated.AbortReason
-         type.enumerated.ErrorCode
-         util.PropertyValues
-         util.PropertyReferences
-         exception.AbortAPDUException
-         exception.ErrorAPDUException
-         exception.ServiceTooBigException
-         ResponseConsumer))
-
-
-
-;;; bacnet4j introduced some kind of callbacks with the
-;;; request-sending mechanism. For simplicity sake, we use promises to
-;;; reconvert all this into normal synchronous operations; The
-;;; operations will block until the remote devices answer the
-;;; requests. The user can use parallel functions like `pmap' if he
-;;; wants to send multiple requests at the same time.
-
-(defn make-response-consumer [return-promise]
-  (reify ResponseConsumer
-    (success [this ackowledgement-service]
-      (deliver return-promise {:success (do (state/set-request-response! ackowledgement-service)
-                                            (or (c/bacnet->clojure ackowledgement-service) true))}))
-    (fail [this ack-APDU-error]
-      (deliver return-promise (or (cond
-                                    (= com.serotonin.bacnet4j.apdu.Abort (class ack-APDU-error))
-                                    {:abort (let [reason (.getAbortReason ack-APDU-error)]
-                                              (state/set-request-response! ack-APDU-error)
-                                              {:abort-reason (->> reason
-                                                                  (c/clojure->bacnet :abort-reason)
-                                                                  (c/bacnet->clojure))
-                                               :apdu-error ack-APDU-error})}
-                                    (= com.serotonin.bacnet4j.apdu.Reject (class ack-APDU-error))
-                                    {:reject (let [reason (.getRejectReason ack-APDU-error)]
-                                               (state/set-request-response! ack-APDU-error)
-                                               {:reject-reason (c/bacnet->clojure reason)
-                                                :apdu-error ack-APDU-error
-                                                })}
-                                    :else
-                                    (do
-                                      (state/set-request-response! ack-APDU-error)
-                                      (some-> (.getError ack-APDU-error)
-                                              (c/bacnet->clojure)))))))
-    (ex [this bacnet-exception]
-      (deliver return-promise {:timeout {:timeout-error bacnet-exception}})
-      )))
-
-
-(defn send-request-promise
-  "Send the request to the remote device.
-  The possible return values are :
-
-  {:success <expected valuezs - if any>
-   :error {:error-class ..., :error-code ...}}
-
-  Will block until the remote device answers."
-  ([device-id request] (send-request-promise nil device-id request))
-  ([local-device-id device-id request]
-   (let [local-device (ld/local-device-object local-device-id)
-         return-promise (promise)
-         timeout (:apdu-timeout (ld/get-configs local-device-id))
-         bacnet4j-future (if (.isInitialized local-device)
-                           (.send local-device
-                                  (.getRemoteDeviceBlocking local-device device-id) request
-                                  (make-response-consumer return-promise))
-                           (throw (Exception. "Can't send request while the device isn't initialized.")))]
-     ;; bacnet4j seems a little icky when dealing with timeouts...
-     ;; better handling it ourself.
-     ;; (future (do (Thread/sleep (+ timeout 1000))
-     ;;             (deliver return-promise {:timeout "The request timed out. The remote device might not be on the network anymore."})))
-     @return-promise)))
-
-
-
+(import (com.serotonin.bacnet4j service.confirmed.ReadPropertyRequest
+                                service.confirmed.ReadPropertyMultipleRequest
+                                type.constructed.ReadAccessSpecification
+                                type.enumerated.AbortReason
+                                type.enumerated.ErrorCode
+                                util.PropertyValues
+                                util.PropertyReferences
+                                exception.AbortAPDUException
+                                exception.ErrorAPDUException
+                                exception.ServiceTooBigException))
 
 ;; ================================================================
 ;; =====================  Normal read request =====================
@@ -105,9 +38,7 @@
   "Read a single property."
   [local-device-id device-id object-identifier property-reference]
   (->> (read-property-request object-identifier property-reference)
-       (send-request-promise local-device-id device-id)))
-
-
+       (services/send-request-promise local-device-id device-id)))
 
 (defn expand-array
   "Ask the remote device what is the length of the BACnet array and
@@ -254,7 +185,7 @@
   (let [results (for [refs (partition-object-property-references
                             local-device-id device-id obj-prop-references)]
                   (->> (read-property-multiple-request refs)
-                       (send-request-promise local-device-id device-id)))]
+                       (services/send-request-promise local-device-id device-id)))]
     ;; the remote device might send an error for the entire
     ;; read-property-multiple request, even if only ONE object is
     ;; problematic (example error: :unkown-object). This means that we
@@ -551,4 +482,4 @@
   none is provided)."
   [local-device-id device-id object-identifier property-identifier array-index [reference range] & by-what?]
   (->> (read-range-request object-identifier property-identifier array-index [reference range] by-what?)
-       (send-request-promise local-device-id device-id)))
+       (services/send-request-promise local-device-id device-id)))

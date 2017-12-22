@@ -3,6 +3,7 @@
   (:require [bacure.local-device :as ld]
             [bacure.read-properties :as rp]
             [bacure.remote-device :as rd]
+            [bacure.services :as services]
             [bacure.network :as net]))
 
 
@@ -20,7 +21,7 @@
           rd-id 1338]
       (init-test-local-device! ld-id)
       (testing "Partition array"
-        (with-redefs [rp/send-request-promise (constantly {:success 10})]
+        (with-redefs [services/send-request-promise (constantly {:success 10})]
           (let [expected-result (into [] (for [i (range 1 11)]
                                            [[:device rd-id] [:object-list i]]))]
             (is (= expected-result 
