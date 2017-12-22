@@ -112,8 +112,8 @@
       (add-remote-object-to-cache! local-device-id remote-device remote-object))
     
     ;; This was useful for debugging, but it's not needed for any features so far
-    (comment requestReceived [from service]
-      (apply prn [(c/bacnet->clojure from) (c/bacnet->clojure service)]))
+    ;;(requestReceived [from service]
+    ;;  (apply prn [(c/bacnet->clojure from) (c/bacnet->clojure service)]))
 
     (covNotificationReceived [subscriber-process-identifier initiating-device-identifier
                               monitored-object-identifier time-remaining list-of-values]
