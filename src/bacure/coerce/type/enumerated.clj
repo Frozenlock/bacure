@@ -1,58 +1,66 @@
 (ns bacure.coerce.type.enumerated
   (:require [bacure.coerce :as c :refer [bacnet->clojure clojure->bacnet]])
-  (:import [com.serotonin.bacnet4j.type.enumerated
-            AbortReason
-            AccessAuthenticationFactorDisable
-            AccessCredentialDisable
-            AccessCredentialDisableReason
-            AccessEvent
-            AccessPassbackMode
-            AccessUserType
-            AccessZoneOccupancyState
-            Action
-            AuthenticationFactorType
-            AuthenticationStatus
-            BackupState
-            BinaryPV
-            DeviceStatus
-            DoorAlarmState
-            DoorSecuredStatus
-            DoorStatus
-            DoorValue
-            EngineeringUnits
-            ErrorClass
-            ErrorCode
-            EventState
-            EventType
-            FileAccessMethod
-            LifeSafetyMode
-            LifeSafetyOperation
-            LifeSafetyState
-            LightingInProgress
-            LightingOperation
-            LightingTransition
-            LockStatus
-            LoggingType
-            Maintenance
-            MessagePriority
-            NodeType
-            NotifyType
-            ObjectType
-            Polarity
-            ProgramError
-            ProgramRequest
-            ProgramState
-            PropertyIdentifier
-            RejectReason
-            Reliability
-            RestartReason
-            SecurityLevel
-            Segmentation
-            ShedState
-            SilencedState
-            VtClass
-            WriteStatus]))
+  (:import com.serotonin.bacnet4j.service.confirmed.DeviceCommunicationControlRequest$EnableDisable
+           (com.serotonin.bacnet4j.type.enumerated AbortReason
+                                                   AccessAuthenticationFactorDisable
+                                                   AccessCredentialDisable
+                                                   AccessCredentialDisableReason
+                                                   AccessEvent
+                                                   AccessPassbackMode
+                                                   AccessUserType
+                                                   AccessZoneOccupancyState
+                                                   Action
+                                                   AuthenticationFactorType
+                                                   AuthenticationStatus
+                                                   BackupState
+                                                   BinaryPV
+                                                   DeviceStatus
+                                                   DoorAlarmState
+                                                   DoorSecuredStatus
+                                                   DoorStatus
+                                                   DoorValue
+                                                   EngineeringUnits
+                                                   ErrorClass
+                                                   ErrorCode
+                                                   EventState
+                                                   EventType
+                                                   FileAccessMethod
+                                                   LifeSafetyMode
+                                                   LifeSafetyOperation
+                                                   LifeSafetyState
+                                                   LightingInProgress
+                                                   LightingOperation
+                                                   LightingTransition
+                                                   LockStatus
+                                                   LoggingType
+                                                   Maintenance
+                                                   MessagePriority
+                                                   NodeType
+                                                   NotifyType
+                                                   ObjectType
+                                                   Polarity
+                                                   ProgramError
+                                                   ProgramRequest
+                                                   ProgramState
+                                                   PropertyIdentifier
+                                                   RejectReason
+                                                   Reliability
+                                                   RestartReason
+                                                   SecurityLevel
+                                                   Segmentation
+                                                   ShedState
+                                                   SilencedState
+                                                   VtClass
+                                                   WriteStatus)))
 
+
+;; TODO: not sure how to use enumerated-converter here. halp.
+(defmethod clojure->bacnet :enable-disable
+  [_ boolean-state]
+
+  (if boolean-state
+    (. DeviceCommunicationControlRequest$EnableDisable enable)
+    (. DeviceCommunicationControlRequest$EnableDisable disable)))
 
 (c/enumerated-converter AbortReason)
 (c/enumerated-converter AccessAuthenticationFactorDisable)

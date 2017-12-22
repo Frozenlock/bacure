@@ -19,9 +19,9 @@
        (get @state)))
 
 (defn- get-in-value
-  [state k sub-ks]
+  [state k sub-ks & [default]]
   (-> (get-value state k)
-      (get-in sub-ks)))
+      (get-in sub-ks default)))
 
 (defn- assoc-value!
   [state k v]
@@ -63,8 +63,8 @@
 
 (defn get-in-local-device ;; previously 'get-local-device-property'
   "Return the value"
-  [device-id ks]
-  (get-in-value local-devices device-id ks))
+  [device-id ks & [default]]
+  (get-in-value local-devices device-id ks default))
 
 (defn assoc-in-local-device!
   "Set the value"

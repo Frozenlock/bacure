@@ -15,25 +15,6 @@
                                    transport.DefaultTransport)
            (java.net InetSocketAddress)))
 
-
-
-(defmacro mapify
-  "Given some symbols, construct a map with the symbols as keys, and
-  the value of the symbols as the map values. For example:
-  (Let [aa 12]
-     (mapify aa))
-  => {:aa 12}"
-  [& symbols]
-  `(into {}
-         (filter second
-                 ~(into []
-                        (for [item symbols]
-                          [(keyword item) item])))))
-
-
-;; ================
-
-
 ;; we store all the local devices with their device-id as the key.
 
 (defn list-local-devices []
@@ -177,6 +158,7 @@
                                  :serial-connection serial-connection
                                  :remote-devices #{}
                                  :remote-objects {}
+                                 :cov-events {}
                                  :init-configs (merge configs
                                                       {:device-id device-id
                                                        :broadcast-address broadcast-address
@@ -349,3 +331,15 @@
   ([local-device-id] (load-local-device-backup! local-device-id nil))
   ([local-device-id new-configs]
    (reset-local-device! (merge (save/get-configs) new-configs))))
+
+(defn- set-communication-state!
+  ([state] (set-communication-state! state nil 1))
+
+  ([state minutes] (set-communication-state! state nil minutes))
+
+  ([state local-device-id minutes]
+   (-> (local-device-object local-device-id)
+       (.setCommunicationControl (c/clojure->bacnet :enable-disable state) minutes))))
+
+(def disable-communications! (partial set-communication-state! false))
+(def enable-communications! (partial set-communication-state! true))

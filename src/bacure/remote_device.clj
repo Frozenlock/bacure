@@ -241,7 +241,7 @@
                                          (c/clojure->bacnet :object-type (:object-type object-map)))
                                        (obj/encode-properties object-map :object-type :object-identifier
                                                               :object-list))]
-     (rp/send-request-promise local-device-id device-id request))))
+     (services/send-request-promise local-device-id device-id request))))
 
 (defn delete-remote-object!
   "Send a 'delete object' request to a remote device.
@@ -251,7 +251,7 @@
   ([device-id object-identifier] (delete-remote-object! nil device-id object-identifier))
   ([local-device-id device-id object-identifier]
    (let [request (DeleteObjectRequest. (c/clojure->bacnet :object-identifier object-identifier))]
-     (rp/send-request-promise local-device-id device-id request))))
+     (services/send-request-promise local-device-id device-id request))))
 
 
 (defn advanced-property
@@ -287,7 +287,7 @@
                                         encoded-value
                                         (when priority
                                           (c/clojure->bacnet :unsigned-integer priority)))]
-     (rp/send-request-promise local-device-id device-id request))))
+     (services/send-request-promise local-device-id device-id request))))
 
 
 (defn set-remote-properties!
@@ -311,7 +311,7 @@
                 (c/clojure->bacnet :sequence-of
                                    (map #(c/clojure->bacnet :write-access-specification %)
                                         write-access-specificiations)))]
-       (rp/send-request-promise local-device-id device-id req))
+       (services/send-request-promise local-device-id device-id req))
      ;; fallback to writing properties individually
      (let [set-object-props!
            (fn [[obj-id props]]

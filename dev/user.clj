@@ -6,6 +6,7 @@
             [bacure.services :as services]
             [bacure.events :as events]
             [bacure.state :as state]
+            [bacure.coerce :as c]
             [clojure.repl :refer :all]
             [serial.core]
             [serial.util]))
