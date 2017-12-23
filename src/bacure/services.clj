@@ -23,28 +23,25 @@
       (deliver return-promise {:success (do (state/set-request-response! acknowledgement-service)
                                             (or (c/bacnet->clojure acknowledgement-service) true))}))
     (fail [this ack-APDU-error]
-      (deliver return-promise (or (cond
-                                    (= com.serotonin.bacnet4j.apdu.Abort (class ack-APDU-error))
-                                    {:abort (let [reason (.getAbortReason ack-APDU-error)]
-                                              (state/set-request-response! ack-APDU-error)
-                                              {:abort-reason (->> reason
-                                                                  (c/clojure->bacnet :abort-reason)
-                                                                  (c/bacnet->clojure))
-                                               :apdu-error ack-APDU-error})}
-                                    (= com.serotonin.bacnet4j.apdu.Reject (class ack-APDU-error))
-                                    {:reject (let [reason (.getRejectReason ack-APDU-error)]
-                                               (state/set-request-response! ack-APDU-error)
-                                               {:reject-reason (c/bacnet->clojure reason)
-                                                :apdu-error ack-APDU-error
-                                                })}
-                                    :else
-                                    (do
-                                      (state/set-request-response! ack-APDU-error)
-                                      (some-> (.getError ack-APDU-error)
-                                              (c/bacnet->clojure)))))))
+      (deliver return-promise (do
+                                (state/set-request-response! ack-APDU-error)
+                                (or (condp = (class ack-APDU-error)
+                                      
+                                      com.serotonin.bacnet4j.apdu.Abort
+                                      {:abort (let [reason (.getAbortReason ack-APDU-error)]
+                                                {:abort-reason (->> reason
+                                                                    (c/clojure->bacnet :abort-reason)
+                                                                    (c/bacnet->clojure))})}
+                                      
+                                      com.serotonin.bacnet4j.apdu.Reject
+                                      {:reject (let [reason (.getRejectReason ack-APDU-error)]
+                                                 {:reject-reason (c/bacnet->clojure reason)})}
+                                      
+                                      com.serotonin.bacnet4j.apdu.Error
+                                      {:error (some-> (.getError ack-APDU-error)
+                                                      (c/bacnet->clojure))})))))
     (ex [this bacnet-exception]
-      (deliver return-promise {:timeout {:timeout-error bacnet-exception}})
-      )))
+      (deliver return-promise {:timeout {:timeout-error bacnet-exception}}))))
 
 (defn send-request-promise
   "Send the request to the remote device.
