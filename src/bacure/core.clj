@@ -10,11 +10,12 @@
   find the remote devices." 
   ([] (boot-up! nil))
   ([configs]
-   (ld/load-local-device-backup! (:device-id configs) configs)
-   (ld/maybe-register-as-foreign-device! local-device-id)
-   (ld/i-am-broadcast!)
-   (future (rd/discover-network)
-           true)))
+   (let [device-id (:device-id configs)]
+     (ld/load-local-device-backup! device-id configs)
+     (ld/maybe-register-as-foreign-device! device-id)
+     (ld/i-am-broadcast!)
+     (future (rd/discover-network)
+             true))))
 
 
 (defn find-bacnet-port
