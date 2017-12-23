@@ -101,15 +101,16 @@
 (defn- get-sane-configs-map
   [configs-map]
   {:pre [(#{:ipv4 :mstp} (:network-type configs-map))]}
-
-  (assoc configs-map
-         :device-id (or (:device-id configs-map)
+  (let [device-id (or (:device-id configs-map)
                         (last (:object-identifier configs-map))
-                        (:device-id default-configs))
-         :broadcast-address (or (:broadcast-address configs-map)
-                                (net/get-broadcast-address (or (:local-address configs-map) (net/get-any-ip))))
-         :local-address (or (:local-address configs-map) IpNetwork/DEFAULT_BIND_IP)
-         :port (or (:port configs-map) IpNetwork/DEFAULT_PORT)))
+                        (:device-id default-configs))]
+    (assoc configs-map
+           :device-id device-id
+           :broadcast-address (or (:broadcast-address configs-map)
+                                  (net/get-broadcast-address (or (:local-address configs-map) (net/get-any-ip))))
+           :local-address (or (:local-address configs-map) IpNetwork/DEFAULT_BIND_IP)
+           :port (or (:port configs-map) IpNetwork/DEFAULT_PORT)
+           :object-name (or (:object-name configs-map) (str "Bacure device "device-id)))))
 
 (declare terminate!)
 
@@ -201,6 +202,19 @@
            (.getNetwork)
            (.unregisterAsForeignDevice))))
 
+(defn maybe-register-as-foreign-device!
+  "Try to register the device if the key ':foreign-device-target' is
+  present in the configuration "
+  [local-device-id]
+  (when-let [fdt (some-> (get-local-device local-device-id)
+                         :init-configs
+                         :foreign-device-target)]
+    (let [{:keys [host port]} fdt]
+      (when (and host port)
+        (try
+          (register-as-foreign-device host port 3600)
+          (catch Exception e))))))
+
 
 (defn i-am-broadcast!
   "Send an 'I am' broadcast on the network."
@@ -238,7 +252,6 @@
          (try (save/load-program)  ;; Anything in the program will be executed.
               (catch Exception e (println (str "Uh oh... couldn't load the local device program:\n"
                                                (.getMessage e)))))
-
          ;; return true if we are bound to the port
          port-bind)))))
 

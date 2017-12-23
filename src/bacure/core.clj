@@ -11,7 +11,7 @@
   ([] (boot-up! nil))
   ([configs]
    (ld/load-local-device-backup! (:device-id configs) configs)
-   
+   (ld/maybe-register-as-foreign-device! local-device-id)
    (ld/i-am-broadcast!)
    (future (rd/discover-network)
            true)))
