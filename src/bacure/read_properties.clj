@@ -235,19 +235,6 @@
                :object-identifier oid)))))
 
 
-;; (defn assemble-results [results]
-;;   (println "assembling results...")
-;;   (def zzz results)
-;;   (->> results
-;;        (apply concat)
-;;        (remove nil?)
-;;        (apply (fn [& results]
-;;                 (let [oid (:object-identifier (first results))]
-;;                   (assoc
-;;                    (apply (partial merge-with concat)
-;;                           (map #(dissoc % :object-identifier) results))
-;;                    :object-identifier oid))))))
-
 (defn read-array-in-chunks
   "Read the partitioned arrays in chunks and then assemble them back
   together." [local-device-id device-id partitioned-array]
