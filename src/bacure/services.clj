@@ -2,7 +2,9 @@
   (:require [bacure.coerce :as c]
             [bacure.local-device :as ld]
             [bacure.state :as state]
-            [bacure.events :as events])
+            [bacure.events :as events]
+            [bacure.coerce.service.confirmed]
+            [bacure.coerce.service.acknowledgement])
   (:import (com.serotonin.bacnet4j ResponseConsumer)
            (com.serotonin.bacnet4j.service.unconfirmed WhoIsRequest
                                                        WhoHasRequest

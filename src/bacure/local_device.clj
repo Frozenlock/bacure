@@ -5,7 +5,6 @@
             [bacure.coerce.type.primitive]
             [bacure.coerce.type.enumerated]
             [bacure.coerce.type.constructed]
-            [bacure.coerce.service.confirmed]
             [bacure.local-save :as save]
             [bacure.serial-connection :as serial]
             [bacure.state :as state]
