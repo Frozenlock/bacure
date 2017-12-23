@@ -174,8 +174,8 @@
   on another network. Will block until the registration is completed
   or the request times out.
 
-  The time-to-live is the time after which we should be removed from
-  the foreign device table (if we don't re-register).
+  The time-to-live is the time in minutes after which we should be
+  removed from the foreign device table (if we don't re-register).
 
   Re-registration are handled automatically.
 
