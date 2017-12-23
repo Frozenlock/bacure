@@ -3,7 +3,11 @@
   (:require [bacure.local-device :as ld]
             [bacure.remote-device :as rd]))
 
-(defn generate-local-devices [qty]
+(defn generate-local-devices!
+  "Generate multiple devices with a unique IP address (they don't bind
+  to the anylocal \"0.0.0.0\" and thus won't automatically receive
+  broadcasts.)."
+  [qty]
   (let [ids-and-addr (for [i (range 1 (inc qty))]
                        {:id i :ip-address (str "127.0.0."i)})]
     (doseq [m ids-and-addr]
@@ -17,7 +21,7 @@
 
 (deftest foreign-devices
   (ld/with-temp-devices
-    (let [ids-and-addr (generate-local-devices 2)]
+    (let [ids-and-addr (generate-local-devices! 2)]
       ;; we shouldn't see any remote device
       (is (-> (rd/remote-devices 2)
               (empty?)))
