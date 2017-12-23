@@ -10,6 +10,12 @@
     (is (= (bacnet->clojure (clojure->bacnet :bacnet-error e))
            e))))
 
+(deftest test-create-object-error
+  (let [e (example :create-object-error)]
+    (is (= (bacnet->clojure (clojure->bacnet :create-object-error e))
+           e))))
+
+
 (deftest test-change-list-error
   (let [e (example :change-list-error)]
     (is (= (bacnet->clojure (clojure->bacnet :change-list-error e))

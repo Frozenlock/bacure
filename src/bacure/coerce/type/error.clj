@@ -5,6 +5,7 @@
             BACnetError
             BaseError
             ChangeListError
+            CreateObjectError
             ConfirmedPrivateTransferError
             ErrorClassAndCode]))
 
@@ -35,6 +36,19 @@
 ;; ONE WAY
 ;; no constructor...
 ;; (BaseError/createBaseError 1 (com.serotonin.bacnet4j.util.sero.ByteQueue. (byte-array 10)))
+
+
+(defmethod clojure->bacnet :create-object-error
+  [_ value]
+  (let [{:keys [error-class-and-code first-failed-element-number]} value]
+    (CreateObjectError. (clojure->bacnet :error-class-and-code error-class-and-code)
+                      (->> (or first-failed-element-number 1)
+                           (clojure->bacnet :unsigned-integer)))))
+
+(defmethod bacnet->clojure CreateObjectError
+  [^CreateObjectError o]
+  {:error-class-and-code (bacnet->clojure (.getErrorClassAndCode o))
+   :first-failed-element-number (bacnet->clojure (.getFirstFailedElementNumber o))})
 
 
 
