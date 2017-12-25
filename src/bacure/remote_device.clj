@@ -17,7 +17,8 @@
   "Get the remote device object by its device-id"
   ([device-id] (rd nil device-id))
   ([local-device-id device-id]
-   (-> (.getRemoteDeviceBlocking (ld/local-device-object local-device-id) device-id))))
+   (some-> (events/cached-remote-devices local-device-id)
+           (get device-id))))
 
 (defn networking-info
   "Return a map with the networking info of the remote device. (The
@@ -97,7 +98,9 @@
   be in the local table. To scan a network, use `discover-network'."
   ([] (remote-devices nil))
   ([local-device-id]
-   (events/cached-remote-devices local-device-id)))
+   (-> (events/cached-remote-devices local-device-id)
+       (keys)
+       (set))))
 
 (defn remote-devices-and-names
   "Return a list of vector pair with the device-id and its name.

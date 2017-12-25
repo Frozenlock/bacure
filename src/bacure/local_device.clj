@@ -158,7 +158,7 @@
      (state/assoc-local-device! device-id
                                 {:bacnet4j-local-device ld
                                  :serial-connection serial-connection
-                                 :remote-devices #{}
+                                 :remote-devices {}
                                  :remote-objects {}
                                  :cov-events {}
                                  :init-configs (merge configs

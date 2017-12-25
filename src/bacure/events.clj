@@ -66,8 +66,8 @@
 
   (let [remote-device-id (.getInstanceNumber remote-device)
         remote-devices   (-> (cached-remote-devices local-device-id)
-                             (conj remote-device-id))]
-
+                             (assoc remote-device-id remote-device))]
+    
     (state/assoc-in-local-device! local-device-id [:remote-devices] remote-devices)))
 
 (defn- add-remote-object-to-cache!
