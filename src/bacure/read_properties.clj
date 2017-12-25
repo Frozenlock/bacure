@@ -5,6 +5,7 @@
             [bacure.coerce.service.acknowledgement]
             [bacure.local-device :as ld]
             [bacure.state :as state]
+            [bacure.events :as events]
             [bacure.services :as services]))
 
 (import (com.serotonin.bacnet4j service.confirmed.ReadPropertyRequest
@@ -155,7 +156,8 @@
 ;; ================================================================
 
 (defn find-max-refs [local-device-id device-id]
-  (let [remote-device (.getRemoteDeviceBlocking (ld/local-device-object local-device-id) device-id)]
+  (let [remote-device (some-> (events/cached-remote-devices local-device-id)
+                              (get device-id))]
     (.getMaxReadMultipleReferences remote-device)))
 
 
@@ -408,8 +410,8 @@
    (read-properties nil device-id object-property-references))
   ([local-device-id device-id object-property-references]
    object-property-references
-   (if (-> (ld/local-device-object local-device-id)
-           (.getRemoteDeviceBlocking device-id)
+   (if (-> (events/cached-remote-devices local-device-id)
+           (get device-id)
            (.getServicesSupported)
            c/bacnet->clojure
            :read-property-multiple)

@@ -58,7 +58,9 @@
          timeout (:apdu-timeout (ld/get-configs local-device-id))
          bacnet4j-future (if (.isInitialized local-device)
                            (.send local-device
-                                  (.getRemoteDeviceBlocking local-device device-id) request
+                                  (some-> (events/cached-remote-devices local-device-id)
+                                          (get device-id))
+                                  request
                                   (make-response-consumer return-promise))
                            (throw (Exception. "Can't send request while the device isn't initialized.")))]
      ;; bacnet4j seems a little icky when dealing with timeouts...
