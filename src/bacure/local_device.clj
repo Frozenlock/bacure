@@ -187,7 +187,7 @@
    (register-as-foreign-device nil target-ip-or-hostname target-port time-to-live))
   
   ([local-device-id target-ip-or-hostname target-port time-to-live]
-   (some-> (state/get-in-local-device local-device-id [:bacnet4j-local-device])
+   (some-> (local-device-object local-device-id)
            (.getNetwork)
            (.registerAsForeignDevice
             (java.net.InetSocketAddress. target-ip-or-hostname target-port) time-to-live))))
@@ -198,7 +198,7 @@
   ([] (unregister-as-foreign-device nil))
 
   ([local-device-id]
-   (some-> (state/get-in-local-device local-device-id [:bacnet4j-local-device])
+   (some-> (local-device-object local-device-id)
            (.getNetwork)
            (.unregisterAsForeignDevice))))
 
