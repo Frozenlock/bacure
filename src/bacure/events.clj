@@ -33,6 +33,32 @@
   ([local-device-id process-identifier]
    (state/get-in-local-device local-device-id [:cov-events process-identifier])))
 
+(defn cached-cov-events-by-object
+  ([] (cached-cov-events-by-object nil default-cov-process-id))
+
+  ([process-identifier] (cached-cov-events-by-object nil process-identifier))
+
+  ([local-device-id process-identifier]
+
+   (reduce (fn [events-by-object {:keys [monitored-object-identifier]
+                                  :as event}]
+             (update events-by-object monitored-object-identifier
+                     #(-> (into [] %1)
+                          (conj %2)) event))
+           {}
+           (cached-cov-events local-device-id process-identifier))))
+
+(defn cached-cov-events-for-object
+  ([object-identifier]
+   (cached-cov-events-for-object nil default-cov-process-id object-identifier))
+
+  ([process-identifier object-identifier]
+   (cached-cov-events-for-object nil process-identifier object-identifier))
+
+  ([local-device-id process-identifier object-identifier]
+   (-> (cached-cov-events-by-object local-device-id process-identifier)
+       (get object-identifier))))
+
 ;; Public methods for manipulating cache
 (defn clear-cached-remote-devices!
   ([] (clear-cached-remote-devices! nil))
