@@ -64,7 +64,7 @@
   ([] (clear-cached-remote-devices! nil))
 
   ([local-device-id]
-   (state/assoc-in-local-device! local-device-id [:remote-devices] #{})))
+   (state/assoc-in-local-device! local-device-id [:remote-devices] {})))
 
 (defn clear-cached-remote-objects!
   ([] (clear-cached-remote-objects! nil))
