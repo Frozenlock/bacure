@@ -1,5 +1,11 @@
 (ns bacure.util)
 
+(defn configurable-wait
+  [{:keys [wait-seconds]
+    :or   {wait-seconds 1}
+    :as   args}]
+
+  (Thread/sleep (* 1000 wait-seconds)))
 
 (defmacro mapify
   "Given some symbols, construct a map with the symbols as keys, and
