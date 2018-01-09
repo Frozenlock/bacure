@@ -117,3 +117,10 @@
                                       lifetime-seconds)]
 
     (send-request-promise local-device-id remote-device-id request)))
+
+(defn send-who-is-router-to-network
+  [local-device-id]
+  (let [ldo (local-device-object local-device-id)
+        n (.getNetwork ldo)
+        b-add (.getLocalBroadcastAddress n)]
+    (.sendNetworkMessage n b-add nil 0 nil true false)))
