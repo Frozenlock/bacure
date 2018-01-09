@@ -4,7 +4,8 @@
             [bacure.local-device :as ld]
             [bacure.read-properties :as rp]
             [bacure.services :as services]
-            [bacure.events :as events])
+            [bacure.events :as events]
+            [bacure.util :as util])
   (:import (com.serotonin.bacnet4j RemoteDevice
                                    event.DeviceEventAdapter
                                    service.confirmed.CreateObjectRequest
@@ -160,7 +161,7 @@
 
   ([local-device-id object-identifier-or-name args]
    (services/send-who-has local-device-id object-identifier-or-name args)
-   (Thread/sleep 1000)
+   (util/configurable-wait args)
    (get-remote-devices-having-object local-device-id object-identifier-or-name)))
 
 (defn find-remote-devices
@@ -179,7 +180,7 @@
 
   ([local-device-id args]
    (services/send-who-is local-device-id args)
-   (Thread/sleep 1000)
+   (util/configurable-wait args)
    (events/cached-remote-devices local-device-id)))
 
 (defn find-remote-device
