@@ -13,11 +13,11 @@
 (defn- get-connection
   "Returns nil if we haven't created this connection yet."
   [com-port]
-  (state/get-serial-connection-property com-port :connection))
+  (state/get-serial-connection-property com-port [:connection]))
 
 (defn connection-opened?
   [com-port]
-  (state/get-serial-connection-property com-port :opened))
+  (state/get-serial-connection-property com-port [:opened]))
 
 (defn- ensure-connection-opened!
   "`config` may contain as key/val pairs any of the serial params that
