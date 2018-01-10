@@ -120,7 +120,7 @@
 
 (defn send-who-is-router-to-network
   [local-device-id]
-  (let [ldo (local-device-object local-device-id)
+  (let [ldo (ld/local-device-object local-device-id)
         n (.getNetwork ldo)
         b-add (.getLocalBroadcastAddress n)]
     (.sendNetworkMessage n b-add nil 0 nil true false)))
