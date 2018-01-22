@@ -321,7 +321,7 @@
   ---> reset the device and change the device id."
   ([] (reset-local-device! nil nil))
   ([config-or-id] (if (map? config-or-id)
-                    (reset-local-device! nil config-or-id)
+                    (reset-local-device! (:device-id config-or-id) config-or-id)
                     (reset-local-device! config-or-id nil)))
   ([local-device-id new-config]
    (if-not (get-local-device local-device-id)
