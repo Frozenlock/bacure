@@ -140,10 +140,10 @@
                       get-sane-configs-map)
          {:keys [device-id broadcast-address port local-address com-port]} configs
          serial-connection (if (some? com-port)
-                             (serial/get-opened-serial-connection! com-port configs))
+                             (serial/get-opened-serial-connection! configs))
          network (case (:network-type configs)
                    :ipv4 (net/ip-network-builder configs)
-                   :mstp (net/create-mstp-network serial-connection configs))
+                   :mstp (net/create-mstp-network configs))
 
          tp      (get-transport network configs)
          ld      (LocalDevice. device-id tp)]
@@ -185,7 +185,7 @@
   is already registered or if the request couldn't be sent."
   ([target-ip-or-hostname target-port time-to-live]
    (register-as-foreign-device nil target-ip-or-hostname target-port time-to-live))
-  
+
   ([local-device-id target-ip-or-hostname target-port time-to-live]
    (some-> (local-device-object local-device-id)
            (.getNetwork)
