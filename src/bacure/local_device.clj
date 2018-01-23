@@ -102,8 +102,8 @@
   [configs-map]
   {:pre [(#{:ipv4 :mstp} (:network-type configs-map))]}
   (let [device-id (or (:device-id configs-map)
-                        (last (:object-identifier configs-map))
-                        (:device-id default-configs))]
+                      (last (:object-identifier configs-map))
+                      (:device-id default-configs))]
     (assoc configs-map
            :device-id device-id
            :broadcast-address (or (:broadcast-address configs-map)
