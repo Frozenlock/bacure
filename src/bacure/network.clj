@@ -122,8 +122,7 @@
         output-stream (serial/get-output-stream serial-conn)
         node-id       (byte node-id)]
     (case node-type
-      :master (create-master-node com-port input-stream output-stream
-                                  node-id mstp-config)
+      :master (create-master-node com-port input-stream output-stream mstp-config)
       :slave  (create-slave-node com-port input-stream output-stream node-id))))
 
 (defn create-mstp-network
