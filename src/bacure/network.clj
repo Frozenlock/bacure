@@ -114,10 +114,7 @@
 (defn- create-mstp-node
   "Based on our configuration, return either a MasterNode or a SlaveNode"
   [{:keys [com-port] :as device-config}
-   {:keys [node-type node-id debug-traffic]
-    :or   {node-type     :master
-           node-id       1}
-    :as   mstp-config}]
+   {:keys [node-type node-id] :or {node-type :master node-id 1} :as mstp-config}]
   {:pre [(#{:master :slave} node-type)]}
 
   (let [serial-conn   (serial/get-opened-serial-connection! device-config)
