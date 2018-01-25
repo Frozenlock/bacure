@@ -17,26 +17,34 @@
 ;;; operations will block until the remote devices answer the
 ;;; requests. The user can use parallel functions like `pmap' if he
 ;;; wants to send multiple requests at the same time.
+(defn- get-success-response
+  [acknowledgement-service]
+
+  (let [coerced (c/bacnet->clojure acknowledgement-service)]
+    (if (some? coerced)
+      coerced
+      true)))
+
 (defn- make-response-consumer [return-promise]
   (reify ResponseConsumer
     (success [this acknowledgement-service]
       (deliver return-promise {:success (do (state/set-request-response! acknowledgement-service)
-                                            (or (c/bacnet->clojure acknowledgement-service) true))}))
+                                            (get-success-response acknowledgement-service))}))
     (fail [this ack-APDU-error]
       (deliver return-promise (do
                                 (state/set-request-response! ack-APDU-error)
                                 (or (condp = (class ack-APDU-error)
-                                      
+
                                       com.serotonin.bacnet4j.apdu.Abort
                                       {:abort (let [reason (.getAbortReason ack-APDU-error)]
                                                 {:abort-reason (->> reason
                                                                     (c/clojure->bacnet :abort-reason)
                                                                     (c/bacnet->clojure))})}
-                                      
+
                                       com.serotonin.bacnet4j.apdu.Reject
                                       {:reject (let [reason (.getRejectReason ack-APDU-error)]
                                                  {:reject-reason (c/bacnet->clojure reason)})}
-                                      
+
                                       com.serotonin.bacnet4j.apdu.Error
                                       {:error (some-> (.getError ack-APDU-error)
                                                       (c/bacnet->clojure))})))))
