@@ -6,7 +6,7 @@
   :repositories {"ias-snapshots" "https://maven.mangoautomation.net/repository/ias-snapshot/"
                  "ias-releases" "https://maven.mangoautomation.net/repository/ias-release"}
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [com.serotonin/bacnet4j "4.0.1"]
+                 [com.serotonin/bacnet4j "4.1.2"]
                  [clj-serial "2.0.3"]
                  ;;[org.clojars.frozenlock/bacnet4j "3.2.4-4"]
                  [clj-time "0.12.0"]

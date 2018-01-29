@@ -196,14 +196,13 @@ The MSTP network uses [clj-serial](https://github.com/peterschwarz/clj-serial),
 which uses [PureJavaComm](https://github.com/nyholku/purejavacomm) for serial
 communication. 
 
-Unfortunately, BACnet4J and PureJavaComm use different methods of logging, and
-BACnet4J itself uses two different types of debug output. Here's a summary:
+Unfortunately, BACnet4J and PureJavaComm use different methods of logging.
+Here's a summary:
 
 - To see BACnet4J log messages, see log/bacnet4j.log. Bacure's default
   configuration uses the WARN level of detail, but this can be configured using
-  bacure/src/log4j.properties.
-- To see BACnet4J's "raw" frame traffic, set the `:debug-traffic` config key in
-  `:mstp-config` to `true`. This only outputs to the REPL / console.
+  bacure/src/log4j.properties. To see pretty much all of the traffic, set the
+  log level to TRACE.
 - To see PureJavaComm's output dump, set `purejavacomm.loglevel` in the
   `:jvm-opts` in project.clj to something higher than 0 (and less than 7). This
   is also REPL/console output.

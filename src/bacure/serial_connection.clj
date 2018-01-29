@@ -25,7 +25,7 @@
   provides default values. The 'apply / partial' backflips allow us to both keep
   `serial/open`'s defaults and also provide config from our end in our usual
   way (as a map.)"
-  [com-port config]
+  [{:keys [com-port] :as config}]
 
   (if-not (connection-opened? com-port)
     (let [opened-connection (apply (partial serial/open com-port)
@@ -48,9 +48,9 @@
 
 (defn get-opened-serial-connection!
   "Creates a new connection if this one hasn't been created yet."
-  [com-port config]
+  [{:keys [com-port] :as config}]
 
-  (ensure-connection-opened! com-port config)
+  (ensure-connection-opened! config)
   (get-connection com-port))
 
 (defn get-input-stream
