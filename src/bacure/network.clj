@@ -95,15 +95,13 @@
   "Return a configured MasterNode object. Master nodes have extra configuration
   they can take that governs their token-passing and poll-for-master behaviors."
   [com-port input-stream output-stream
-   {:keys [retry-count max-info-frames max-master-id node-id]
-    :or   {retry-count     3
-           max-info-frames 8
-           max-master-id   127}
-    :as mstp-config}]
+   {:keys [retry-count max-info-frames max-master-id node-id usage-timeout]
+    :as   mstp-config}]
 
   (doto (MasterNode. com-port input-stream output-stream node-id retry-count)
     (.setMaxInfoFrames max-info-frames)
-    (.setMaxMaster     max-master-id)))
+    (.setMaxMaster     max-master-id)
+    (.setUsageTimeout  usage-timeout)))
 
 (defn- create-slave-node
   "Return a configured SlaveNode object."
