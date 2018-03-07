@@ -86,17 +86,20 @@
 
 (def default-configs
   "Some default configurations for device creation."
-  {:network-type :ipv4
-   :device-id 1338
-   :port 47808
-   :model-name "Bacure"
-   :vendor-identifier 697
-   :apdu-timeout 6000
+  {:network-type           :ipv4
+   :device-id              1338
+   :reuse-address          true
+   :local-network-number   0
+   :local-address          IpNetwork/DEFAULT_BIND_IP
+   :port                   IpNetwork/DEFAULT_PORT
+   :model-name             "Bacure"
+   :vendor-identifier      697
+   :apdu-timeout           6000
    :number-of-apdu-retries 2
-   :broadcast-address (net/get-broadcast-address (net/get-any-ip))
-   :description (str "BACnet device running on the open source Bacure stack. "
-                     "See https://github.com/Frozenlock/bacure for details.")
-   :vendor-name "HVAC.IO"})
+   :broadcast-address      (net/get-broadcast-address (net/get-any-ip))
+   :description            (str "BACnet device running on the open source Bacure stack. "
+                                "See https://github.com/Frozenlock/bacure for details.")
+   :vendor-name            "HVAC.IO"})
 
 (defn- get-sane-configs-map
   [configs-map]
@@ -108,8 +111,6 @@
            :device-id device-id
            :broadcast-address (or (:broadcast-address configs-map)
                                   (net/get-broadcast-address (or (:local-address configs-map) (net/get-any-ip))))
-           :local-address (or (:local-address configs-map) IpNetwork/DEFAULT_BIND_IP)
-           :port (or (:port configs-map) IpNetwork/DEFAULT_PORT)
            :object-name (or (:object-name configs-map) (str "Bacure device "device-id)))))
 
 (declare terminate!)

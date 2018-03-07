@@ -10,6 +10,14 @@
                                               MstpNetwork
                                               SlaveNode)))
 
+(def default-mstp-config
+  {:node-type       :master
+   :node-id         1
+   :retry-count     3
+   :max-info-frames 8
+   :max-master-id   127
+   :usage-timeout   20})
+
 (defn get-interfaces
   "Return the list of interfaces on this machine."[]
   (enumeration-seq (java.net.NetworkInterface/getNetworkInterfaces)))
@@ -80,10 +88,7 @@
 
 (defn ip-network-builder
   "Return an IP network object."
-  [{:keys [broadcast-address local-address local-network-number port reuse-address]
-    :or {reuse-address true, local-network-number 0
-         local-address IpNetwork/DEFAULT_BIND_IP
-         port IpNetwork/DEFAULT_PORT} :as args}]
+  [{:keys [broadcast-address local-address local-network-number port reuse-address]}]
   (-> (doto (IpNetworkBuilder.)
         (.withBroadcast broadcast-address 0) ;;; <--- need to come back to the network-prefix
         (.withLocalBindAddress local-address)
@@ -112,7 +117,7 @@
 (defn- create-mstp-node
   "Based on our configuration, return either a MasterNode or a SlaveNode"
   [{:keys [com-port] :as device-config}
-   {:keys [node-type node-id] :or {node-type :master node-id 1} :as mstp-config}]
+   {:keys [node-type node-id] :as mstp-config}]
   {:pre [(#{:master :slave} node-type)]}
 
   (let [serial-conn   (serial/get-opened-serial-connection! device-config)
@@ -128,8 +133,8 @@
   for the local-device. This class does not have a dedicated 'builder' like the
   IP network does, so we'll call its constructor directly."
   [{:keys [local-network-number mstp-config]
-    :or   {local-network-number 0}
     :as   device-config}]
 
-  (let [node (create-mstp-node device-config mstp-config)]
+  (let [mstp-config (merge default-mstp-config mstp-config)
+        node        (create-mstp-node device-config mstp-config)]
     (MstpNetwork. node local-network-number)))
