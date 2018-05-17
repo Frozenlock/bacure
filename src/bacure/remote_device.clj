@@ -299,11 +299,11 @@
   (let [req (WritePropertyMultipleRequest.
              (c/clojure->bacnet :sequence-of
                                 (map #(c/clojure->bacnet :write-access-specification %)
-                                     write-access-specificiations)))]
+                                     write-access-specifications)))]
     (services/send-request-promise local-device-id device-id req)))
 
 (defn write-single-multiple-properties
-  [local-device-id device-id write-access-specificiations]
+  [local-device-id device-id write-access-specifications]
 
   (let [set-object-props!
         (fn [[obj-id props]]
@@ -312,7 +312,7 @@
                 (assoc :object-identifier obj-id
                        :property-id prop-id
                        :property-value prop-value))))]
-    (->> (mapcat set-object-props! write-access-specificiations)
+    (->> (mapcat set-object-props! write-access-specifications)
          (remove :success)
          (#(if (seq %) {:error {:write-properties-errors (vec %)}} {:success true})))))
 
@@ -321,19 +321,19 @@
 
   Will block until we receive a response back, success or failure.
 
-  'write-access-specificiations' is a map of the form:
+  'write-access-specifications' is a map of the form:
   {[:analog-input 1] [[:present-value 10.0][:description \"short description\"]]}
 
   If the remote device doesn't support 'write-property-multiple',
   fallback to writing all properties individually."
-  ([device-id write-access-specificiations]
-   (set-remote-properties! nil device-id write-access-specificiations))
-  ([local-device-id device-id write-access-specificiations]
+  ([device-id write-access-specifications]
+   (set-remote-properties! nil device-id write-access-specifications))
+  ([local-device-id device-id write-access-specifications]
    (if (-> (services-supported device-id) :write-property-multiple)
      ;; normal behavior
-     (write-property-multiple local-device-id device-id write-access-specificiations)
+     (write-property-multiple local-device-id device-id write-access-specifications)
      ;; fallback to writing properties individually
-     (write-single-multiple-properties local-device-id device-id write-access-specificiations))))
+     (write-single-multiple-properties local-device-id device-id write-access-specifications))))
 
 ;; ;; ================================================================
 ;; ;; Maintenance of the remote devices list
