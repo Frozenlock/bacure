@@ -784,30 +784,29 @@
   [(c/bacnet->clojure (.getObjectIdentifier o))
    (mapv c/bacnet->clojure (.getListOfProperties o))])
 
+(defn- property-value->map
+  [pv]
+  (if (vector? pv)
+    (let [[p-id value] pv]
+      (if (and (map? value) (contains? value :value))
+        (assoc value :property-identifier p-id)
+        {:property-identifier p-id
+         :value               value}))
+    pv))
+
+(defn- get-property-write-specs
+  [oid properties]
+  (mapv #(c/clojure->bacnet :property-value*
+                            (merge (property-value->map %)
+                                   {:object-type (first oid)}))
+        properties))
 
 (defmethod clojure->bacnet :write-access-specification
   [_ value]
-  (let [[oid properties] value
-        pv-fn (fn [pv]
-                (if (vector? pv)
-                  (let [[p-id value] pv]
-                    (if (and (map? value) (contains? value :value))
-                      (assoc value :property-identifier p-id)
-                      {:property-identifier p-id
-                       :value value}))
-                  pv))]
+  (let [[oid properties] value]
     (WriteAccessSpecification.
      (c/clojure->bacnet :object-identifier oid)
-     (c/clojure->bacnet :sequence-of
-                        (mapv #(c/clojure->bacnet :property-value*
-                                                  (merge (pv-fn %)
-                                                         {:object-type (first oid)}))
-                              properties)))))
-
-
-
-
-
+     (c/clojure->bacnet :sequence-of (get-property-write-specs oid properties)))))
 
 ;; (defn c-property-reference
 ;;   "Make a property reference. Argument can be of the forms:
