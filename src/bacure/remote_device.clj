@@ -293,8 +293,28 @@
                                           (c/clojure->bacnet :unsigned-integer priority)))]
      (services/send-request-promise local-device-id device-id request))))
 
-(defn write-property-multiple-request
-  )
+(defn write-property-multiple
+  [local-device-id device-id write-access-specifications]
+
+  (let [req (WritePropertyMultipleRequest.
+             (c/clojure->bacnet :sequence-of
+                                (map #(c/clojure->bacnet :write-access-specification %)
+                                     write-access-specificiations)))]
+    (services/send-request-promise local-device-id device-id req)))
+
+(defn write-single-multiple-properties
+  [local-device-id device-id write-access-specificiations]
+
+  (let [set-object-props!
+        (fn [[obj-id props]]
+          (for [[prop-id prop-value] props]
+            (-> (set-remote-property! local-device-id device-id obj-id prop-id prop-value)
+                (assoc :object-identifier obj-id
+                       :property-id prop-id
+                       :property-value prop-value))))]
+    (->> (mapcat set-object-props! write-access-specificiations)
+         (remove :success)
+         (#(if (seq %) {:error {:write-properties-errors (vec %)}} {:success true})))))
 
 (defn set-remote-properties!
   "Set the given remote object properties.
@@ -309,26 +329,11 @@
   ([device-id write-access-specificiations]
    (set-remote-properties! nil device-id write-access-specificiations))
   ([local-device-id device-id write-access-specificiations]
-   (if (-> (services-supported device-id)
-           :write-property-multiple)
-
+   (if (-> (services-supported device-id) :write-property-multiple)
      ;; normal behavior
-     (let [req (WritePropertyMultipleRequest.
-                (c/clojure->bacnet :sequence-of
-                                   (map #(c/clojure->bacnet :write-access-specification %)
-                                        write-access-specificiations)))]
-       (services/send-request-promise local-device-id device-id req))
+     (write-property-multiple local-device-id device-id write-access-specificiations)
      ;; fallback to writing properties individually
-     (let [set-object-props!
-           (fn [[obj-id props]]
-             (for [[prop-id prop-value] props]
-               (-> (set-remote-property! local-device-id device-id obj-id prop-id prop-value)
-                   (assoc :object-identifier obj-id
-                          :property-id prop-id
-                          :property-value prop-value))))]
-       (->> (mapcat set-object-props! write-access-specificiations)
-            (remove :success)
-            (#(if (seq %) {:error {:write-properties-errors (vec %)}} {:success true})))))))
+     (write-single-multiple-properties local-device-id device-id write-access-specificiations))))
 
 ;; ;; ================================================================
 ;; ;; Maintenance of the remote devices list
