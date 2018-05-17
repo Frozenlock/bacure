@@ -293,14 +293,20 @@
                                           (c/clojure->bacnet :unsigned-integer priority)))]
      (services/send-request-promise local-device-id device-id request))))
 
+(defn send-write-property-multiple-request
+  [local-device-id device-id bacnet-write-access-specifications]
+
+  (->> bacnet-write-access-specifications
+       (c/clojure->bacnet :sequence-of)
+       WritePropertyMultipleRequest.
+       (services/send-request-promise local-device-id device-id)))
+
 (defn write-property-multiple
   [local-device-id device-id write-access-specifications]
 
-  (let [req (WritePropertyMultipleRequest.
-             (c/clojure->bacnet :sequence-of
-                                (map #(c/clojure->bacnet :write-access-specification %)
-                                     write-access-specifications)))]
-    (services/send-request-promise local-device-id device-id req)))
+  (->> write-access-specifications
+       (map #(c/clojure->bacnet :write-access-specification %))
+       (send-write-property-multiple-request local-device-id device-id)))
 
 (defn write-single-multiple-properties
   [local-device-id device-id write-access-specifications]
