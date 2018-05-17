@@ -22,10 +22,10 @@
             DeviceObjectReference
             DeviceObjectPropertyReference
             EventTransitionBits
-            
+
             LimitEnable
             LogRecord
-           
+
             ObjectPropertyReference
             ObjectTypesSupported
             PriorityValue
@@ -52,17 +52,17 @@
 
 
 (defn c-access-rule [value]
-  (let [{:keys [time-range-specifier time-range location-specifier location enable] 
+  (let [{:keys [time-range-specifier time-range location-specifier location enable]
          :or {time-range-specifier :always
               time-range nil
               location-specifier :all
               location nil
               enable true}} value]
     (AccessRule. ;(clojure->bacnet :time-range-specifier time-range-specifier) ;;<- only for private constructor
-                 (clojure->bacnet :device-object-property-reference time-range)
-                 ;(clojure->bacnet :location-specifier location-specifier) ;;<- only for private constructor
-                 (clojure->bacnet :device-object-reference location)
-                 (clojure->bacnet :boolean enable))))
+     (clojure->bacnet :device-object-property-reference time-range)
+                                        ;(clojure->bacnet :location-specifier location-specifier) ;;<- only for private constructor
+     (clojure->bacnet :device-object-reference location)
+     (clojure->bacnet :boolean enable))))
 
 (defmethod clojure->bacnet :access-rule
   [_ value]
@@ -72,9 +72,9 @@
 (defmethod bacnet->clojure AccessRule
   [^AccessRule o]
   {
-   ;:time-range-specifier (bacnet->clojure (.getTimeRangeSpecifier o))
+                                        ;:time-range-specifier (bacnet->clojure (.getTimeRangeSpecifier o))
    :time-range (bacnet->clojure (.getTimeRange o))
-   ;:location-specifier (bacnet->clojure (.getLocationSpecifier o))
+                                        ;:location-specifier (bacnet->clojure (.getLocationSpecifier o))
    :location (bacnet->clojure (.getLocation o))
    :enable (bacnet->clojure (.getEnable o))})
 
@@ -141,8 +141,8 @@
 
 
 (defn c-action-list [coll]
-  (clojure->bacnet :sequence-of 
-                   (map (partial clojure->bacnet :action-command) 
+  (clojure->bacnet :sequence-of
+                   (map (partial clojure->bacnet :action-command)
                         (or coll [nil]))))
 
 (defmethod clojure->bacnet :action-list
@@ -172,7 +172,7 @@
   [^Choice o]
   (bacnet->clojure (.getDatum o)))
 
-;;; 
+;;;
 
 (defn c-daily-schedule [value]
   (DailySchedule.
@@ -181,7 +181,7 @@
 
 (defmethod clojure->bacnet :daily-schedule
   [_ value]
-  (c-daily-schedule 
+  (c-daily-schedule
    (or value [{:time "17:35:1.224" :value 10.2}])))
 
 (defmethod bacnet->clojure DailySchedule
@@ -211,13 +211,13 @@
   (let [date (.getDate o)
         time (.getTime o)]
     ;; we don't handle unspecified time for now.
-    (str (clj-time.core/date-time (.getCenturyYear date) ;; unspecified = 255   
+    (str (clj-time.core/date-time (.getCenturyYear date) ;; unspecified = 255
                                   (max (.getId (.getMonth date)) 1) ;; unspecified default to 1
                                   (let [day (.getDay date)]
                                     (if (= day com.serotonin.bacnet4j.type.primitive.Date/UNSPECIFIED_DAY)
                                       1 day)) ;; unspecified default to 1
                                   (if (.isHourUnspecified time) 0
-                                    (.getHour time))
+                                      (.getHour time))
                                   (if (.isMinuteUnspecified time) 0
                                       (.getMinute time))
                                   (if (.isSecondUnspecified time) 0
@@ -268,7 +268,7 @@
       (throw (Exception. (str "The value for "property-identifier
                               " must already be converted into a bacnet4j object."))))
     (PropertyValue. (clojure->bacnet :property-identifier property-identifier)
-                    (when property-array-index 
+                    (when property-array-index
                       (clojure->bacnet :unsigned-integer property-array-index))
                     value
                     (when priority (clojure->bacnet :unsigned-integer priority)))))
@@ -278,11 +278,11 @@
     (c-property-value* nil)
     (let [[property-identifier value] vectors]
       (c-property-value* {:property-identifier property-identifier
-                         :value value}))))
+                          :value value}))))
 
-(defn c-property-value 
+(defn c-property-value
   "Encode the property-value object. The value must already be a bacnet4j object.
-  
+
   Accept 2 forms. The simple form is the one usually returned when
   converting the bacnet4j object into a clojure datastructure.
 
@@ -294,7 +294,7 @@
 
   Or simple:
   - [property-identifier value]"[m]
-  (if (map? m) 
+  (if (map? m)
     (c-property-value* m)
     (c-simple-property-value m)))
 
@@ -303,7 +303,7 @@
   [_ m]
   (let [{:keys [object-type property-identifier value priority]
          :or {object-type :analog-input property-identifier :present-value value 0}} m
-        encoded-value (obj/encode-property-value object-type property-identifier 
+        encoded-value (obj/encode-property-value object-type property-identifier
                                                  (if (nil? value)
                                                    (obj/force-type value :null) value))]
     (c-property-value {:property-identifier property-identifier
@@ -364,7 +364,7 @@
 
 
 
-(defn c-device-object-reference 
+(defn c-device-object-reference
   [[device-identifier object-identifier]]
   (DeviceObjectReference. (clojure->bacnet :object-identifier device-identifier)
                           (clojure->bacnet :object-identifier object-identifier)))
@@ -384,7 +384,7 @@
 
 ;;;
 
-(defn c-event-transition-bits 
+(defn c-event-transition-bits
   [{:keys [to-fault to-normal to-offnormal]
     :or {to-fault false to-normal false to-offnormal false}}]
   (EventTransitionBits. to-offnormal to-fault to-normal))
@@ -489,7 +489,7 @@
               :property-array-index (bacnet->clojure (.getPropertyArrayIndex o))
               :property-identifier (bacnet->clojure (.getPropertyIdentifier o))}]
     [(:device-identifier data)
-     (-> (clojure->bacnet :object-property-reference 
+     (-> (clojure->bacnet :object-property-reference
                           [(:object-identifier data)
                            [(:property-identifier data)
                             (:property-array-index data)]])
@@ -503,11 +503,11 @@
    [<property-identifier> <property-identifier>]
    [[<property-identifier> <array-index>] [<property-identifier> <array-index>]]"
   [object-identifier property-references]
-   (ReadAccessSpecification.
-    (clojure->bacnet :object-identifier object-identifier)
-    (clojure->bacnet 
-     :sequence-of
-     (mapv (partial clojure->bacnet :property-reference) property-references))))
+  (ReadAccessSpecification.
+   (clojure->bacnet :object-identifier object-identifier)
+   (clojure->bacnet
+    :sequence-of
+    (mapv (partial clojure->bacnet :property-reference) property-references))))
 
 (defmethod clojure->bacnet :read-access-specification
   [_ value]
@@ -664,7 +664,7 @@
 ;;;
 
 (defn c-setpoint-reference [object-property-reference]
-  (SetpointReference. 
+  (SetpointReference.
    (clojure->bacnet :object-property-reference object-property-reference)))
 
 (defmethod clojure->bacnet :setpoint-reference
@@ -715,10 +715,10 @@
 
 (defmethod bacnet->clojure StatusFlags
   [^StatusFlags o]
-    {:in-alarm (.isInAlarm o)
-     :fault (.isFault o)
-     :out-of-service (.isOutOfService o)
-     :overridden (.isOverridden o)})
+  {:in-alarm (.isInAlarm o)
+   :fault (.isFault o)
+   :out-of-service (.isOutOfService o)
+   :overridden (.isOverridden o)})
 ;;;
 
 (def object-types-supported
@@ -758,7 +758,7 @@
 
 (defmethod bacnet->clojure TimeValue
   [^TimeValue o]
-  {:time (bacnet->clojure (.getTime o)) 
+  {:time (bacnet->clojure (.getTime o))
    :value (bacnet->clojure (.getValue o))})
 
 ;;;
@@ -827,7 +827,7 @@
 ;;                               (.getPropertyIdentifier prop-ref)
 ;;                               (.getPropertyArrayIndex prop-ref))))
 
-; DeviceObjectPropertyReference
+                                        ; DeviceObjectPropertyReference
 
 
 ;;;

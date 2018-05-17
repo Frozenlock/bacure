@@ -293,6 +293,8 @@
                                           (c/clojure->bacnet :unsigned-integer priority)))]
      (services/send-request-promise local-device-id device-id request))))
 
+(defn write-property-multiple-request
+  )
 
 (defn set-remote-properties!
   "Set the given remote object properties.
