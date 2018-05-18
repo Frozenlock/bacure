@@ -53,11 +53,11 @@
 
 (defn c-access-rule [value]
   (let [{:keys [time-range-specifier time-range location-specifier location enable]
-         :or {time-range-specifier :always
-              time-range nil
-              location-specifier :all
-              location nil
-              enable true}} value]
+         :or   {time-range-specifier :always
+                time-range           nil
+                location-specifier   :all
+                location             nil
+                enable               true}} value]
     (AccessRule. ;(clojure->bacnet :time-range-specifier time-range-specifier) ;;<- only for private constructor
      (clojure->bacnet :device-object-property-reference time-range)
      ;;(clojure->bacnet :location-specifier location-specifier) ;;<- only for private constructor
@@ -75,8 +75,8 @@
    ;;:time-range-specifier (bacnet->clojure (.getTimeRangeSpecifier o))
    :time-range (bacnet->clojure (.getTimeRange o))
    ;;:location-specifier (bacnet->clojure (.getLocationSpecifier o))
-   :location (bacnet->clojure (.getLocation o))
-   :enable (bacnet->clojure (.getEnable o))})
+   :location   (bacnet->clojure (.getLocation o))
+   :enable     (bacnet->clojure (.getEnable o))})
 
 ;;;
 
@@ -97,9 +97,9 @@
 
 (defmethod bacnet->clojure AccumulatorRecord
   [^AccumulatorRecord o]
-  {:timestamp (bacnet->clojure (.getTimestamp o))
-   :present-value (bacnet->clojure (.getPresentValue o))
-   :accumulated-value (bacnet->clojure (.getAccumulatedValue o))
+  {:timestamp          (bacnet->clojure (.getTimestamp o))
+   :present-value      (bacnet->clojure (.getPresentValue o))
+   :accumulated-value  (bacnet->clojure (.getAccumulatedValue o))
    :accumulator-status (bacnet->clojure (.getAccumulatorStatus o))})
 
 ;;;
@@ -127,15 +127,15 @@
 
 (defmethod bacnet->clojure ActionCommand
   [^ActionCommand o]
-  {:device-identifier (bacnet->clojure (.getDeviceIdentifier o))
-   :object-identifier (bacnet->clojure (.getObjectIdentifier o))
-   :property-identifier (bacnet->clojure (.getPropertyIdentifier o))
+  {:device-identifier    (bacnet->clojure (.getDeviceIdentifier o))
+   :object-identifier    (bacnet->clojure (.getObjectIdentifier o))
+   :property-identifier  (bacnet->clojure (.getPropertyIdentifier o))
    :property-array-index (bacnet->clojure (.getPropertyArrayIndex o))
-   :property-value (bacnet->clojure (.getPropertyValue o))
-   :priority (bacnet->clojure (.getPriority o))
-   :post-delay (bacnet->clojure (.getPostDelay o))
-   :quit-on-failure (bacnet->clojure (.getQuitOnFailure o))
-   :write-successful (bacnet->clojure (.getWriteSuccessful o))})
+   :property-value       (bacnet->clojure (.getPropertyValue o))
+   :priority             (bacnet->clojure (.getPriority o))
+   :post-delay           (bacnet->clojure (.getPostDelay o))
+   :quit-on-failure      (bacnet->clojure (.getQuitOnFailure o))
+   :write-successful     (bacnet->clojure (.getWriteSuccessful o))})
 
 ;;;
 
@@ -162,7 +162,7 @@
 
 (defmethod bacnet->clojure Address
   [^Address o]
-  {:mac-address (bacnet->clojure (.getMacAddress o))
+  {:mac-address    (bacnet->clojure (.getMacAddress o))
    :network-number (bacnet->clojure (.getNetworkNumber o))})
 
 
@@ -263,7 +263,7 @@
 
 (defn c-property-value* [m]
   (let [{:keys [property-identifier property-array-index value priority]
-         :or {value (clojure->bacnet :unsigned-integer nil)}} m] ;; <-- allow quick object generation with empty map
+         :or   {value (clojure->bacnet :unsigned-integer nil)}} m] ;; <-- allow quick object generation with empty map
     (when-not (instance? com.serotonin.bacnet4j.type.Encodable value)
       (throw (Exception. (str "The value for "property-identifier
                               " must already be converted into a bacnet4j object."))))
@@ -278,7 +278,7 @@
     (c-property-value* nil)
     (let [[property-identifier value] vectors]
       (c-property-value* {:property-identifier property-identifier
-                          :value value}))))
+                          :value               value}))))
 
 (defn c-property-value
   "Encode the property-value object. The value must already be a bacnet4j object.
@@ -302,13 +302,14 @@
 (defmethod clojure->bacnet :property-value*
   [_ m]
   (let [{:keys [object-type property-identifier value priority]
-         :or {object-type :analog-input property-identifier :present-value value 0}} m
+         :or   {object-type :analog-input property-identifier :present-value value 0}} m
+
         encoded-value (obj/encode-property-value object-type property-identifier
                                                  (if (nil? value)
                                                    (obj/force-type value :null) value))]
     (c-property-value {:property-identifier property-identifier
-                       :value encoded-value
-                       :priority priority})))
+                       :value               encoded-value
+                       :priority            priority})))
 
 
 ;; Another though one. Most of the time, users won't care about the
@@ -338,15 +339,15 @@
 
 (defmethod bacnet->clojure PropertyValue
   [^PropertyValue o]
-  (let [p-id (bacnet->clojure (.getPropertyIdentifier o))
+  (let [p-id          (bacnet->clojure (.getPropertyIdentifier o))
         p-array-index (bacnet->clojure (.getPropertyArrayIndex o))
-        value (bacnet->clojure (.getValue o))
-        priority (bacnet->clojure (.getPriority o))]
+        value         (bacnet->clojure (.getValue o))
+        priority      (bacnet->clojure (.getPriority o))]
     (if *detailed-property-value*
-      {:property-identifier p-id
+      {:property-identifier  p-id
        :property-array-index p-array-index
-       :value value
-       :priority priority}
+       :value                value
+       :priority             priority}
       [p-id value])))
 
 
@@ -395,8 +396,8 @@
 
 (defmethod bacnet->clojure EventTransitionBits
   [^EventTransitionBits o]
-  {:to-fault (.isToFault o)
-   :to-normal (.isToNormal o)
+  {:to-fault     (.isToFault o)
+   :to-normal    (.isToNormal o)
    :to-offnormal (.isToOffnormal o)})
 
 
@@ -404,7 +405,7 @@
 
 (defn c-limit-enable
   [{:keys [high-limit-enable low-limit-enable]
-    :or {high-limit-enable false low-limit-enable false}}]
+    :or   {high-limit-enable false low-limit-enable false}}]
   (LimitEnable. low-limit-enable high-limit-enable))
 
 (defmethod clojure->bacnet :limit-enable
@@ -414,7 +415,7 @@
 (defmethod bacnet->clojure LimitEnable
   [^LimitEnable o]
   {:high-limit-enable (.isHighLimitEnable o)
-   :low-limit-enable (.isLowLimitEnable o)})
+   :low-limit-enable  (.isLowLimitEnable o)})
 
 
 
@@ -434,10 +435,10 @@
 (defmethod bacnet->clojure LogRecord
   [^LogRecord o]
   (let [value (.getChoice o)]
-    {:timestamp (bacnet->clojure (.getTimestamp o))
+    {:timestamp    (bacnet->clojure (.getTimestamp o))
      :status-flags (bacnet->clojure (.getStatusFlags o))
-     :type (c/class-to-keyword (class value))
-     :value (bacnet->clojure value)}))
+     :type         (c/class-to-keyword (class value))
+     :value        (bacnet->clojure value)}))
 
 
 
@@ -484,10 +485,10 @@
 
 (defmethod bacnet->clojure DeviceObjectPropertyReference
   [^DeviceObjectPropertyReference o]
-  (let [data {:device-identifier (bacnet->clojure (.getDeviceIdentifier o))
-              :object-identifier (bacnet->clojure (.getObjectIdentifier o))
+  (let [data {:device-identifier    (bacnet->clojure (.getDeviceIdentifier o))
+              :object-identifier    (bacnet->clojure (.getObjectIdentifier o))
               :property-array-index (bacnet->clojure (.getPropertyArrayIndex o))
-              :property-identifier (bacnet->clojure (.getPropertyIdentifier o))}]
+              :property-identifier  (bacnet->clojure (.getPropertyIdentifier o))}]
     [(:device-identifier data)
      (-> (clojure->bacnet :object-property-reference
                           [(:object-identifier data)
@@ -699,14 +700,14 @@
   [^ShedLevel o]
   (or (try {:real (bacnet->clojure (.getAmount o))}
            (catch Exception e))
-      {:level (bacnet->clojure (.getLevel o))
+      {:level   (bacnet->clojure (.getLevel o))
        :percent (bacnet->clojure (.getPercent o))}))
 
 
 ;;;
 
-(defn c-status-flags [{:keys[in-alarm fault overridden out-of-service]
-                       :or {in-alarm false fault false overridden false out-of-service false}}]
+(defn c-status-flags [{:keys [in-alarm fault overridden out-of-service]
+                       :or   {in-alarm false fault false overridden false out-of-service false}}]
   (StatusFlags. in-alarm fault overridden out-of-service))
 
 (defmethod clojure->bacnet :status-flags
@@ -715,10 +716,10 @@
 
 (defmethod bacnet->clojure StatusFlags
   [^StatusFlags o]
-  {:in-alarm (.isInAlarm o)
-   :fault (.isFault o)
+  {:in-alarm       (.isInAlarm o)
+   :fault          (.isFault o)
    :out-of-service (.isOutOfService o)
-   :overridden (.isOverridden o)})
+   :overridden     (.isOverridden o)})
 ;;;
 
 (def object-types-supported
@@ -758,7 +759,7 @@
 
 (defmethod bacnet->clojure TimeValue
   [^TimeValue o]
-  {:time (bacnet->clojure (.getTime o))
+  {:time  (bacnet->clojure (.getTime o))
    :value (bacnet->clojure (.getValue o))})
 
 ;;;
