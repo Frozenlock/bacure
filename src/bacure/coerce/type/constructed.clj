@@ -60,7 +60,7 @@
               enable true}} value]
     (AccessRule. ;(clojure->bacnet :time-range-specifier time-range-specifier) ;;<- only for private constructor
      (clojure->bacnet :device-object-property-reference time-range)
-                                        ;(clojure->bacnet :location-specifier location-specifier) ;;<- only for private constructor
+     ;;(clojure->bacnet :location-specifier location-specifier) ;;<- only for private constructor
      (clojure->bacnet :device-object-reference location)
      (clojure->bacnet :boolean enable))))
 
@@ -72,9 +72,9 @@
 (defmethod bacnet->clojure AccessRule
   [^AccessRule o]
   {
-                                        ;:time-range-specifier (bacnet->clojure (.getTimeRangeSpecifier o))
+   ;;:time-range-specifier (bacnet->clojure (.getTimeRangeSpecifier o))
    :time-range (bacnet->clojure (.getTimeRange o))
-                                        ;:location-specifier (bacnet->clojure (.getLocationSpecifier o))
+   ;;:location-specifier (bacnet->clojure (.getLocationSpecifier o))
    :location (bacnet->clojure (.getLocation o))
    :enable (bacnet->clojure (.getEnable o))})
 
