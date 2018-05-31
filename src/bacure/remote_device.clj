@@ -187,11 +187,15 @@
   "Send a WhoIs for a single device-id, effectively finding a single
   device. Some devices seem to ignore a general WhoIs broadcast, but
   will answer a WhoIs request specifically for their ID."
-  ([id] (find-remote-device nil id))
+  ([id] (find-remote-device nil id {}))
 
   ([local-device-id remote-device-id]
+   (find-remote-devices local-device-id remote-device-id {}))
+
+  ([local-device-id remote-device-id args]
    (find-remote-devices local-device-id
-                        {:min-range remote-device-id :max-range remote-device-id})))
+                        (merge {:min-range remote-device-id :max-range remote-device-id}
+                               args))))
 
 
 (defn- find-remote-devices-and-extended-information
