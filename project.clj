@@ -1,12 +1,12 @@
-(defproject bacure "1.1.0-alpha"
+(defproject bacure "1.1.0-alpha2"
   :description "A Clojure wrapper for the bacnet4j library... and some nice additions."
   :url "https://hvac.io"
   :license {:name "GNU General Public License V3"
             :url "http://www.gnu.org/licenses/gpl-3.0.html"}
   :repositories {"ias-snapshots" "https://maven.mangoautomation.net/repository/ias-snapshot/"
-                 "ias-releases" "https://maven.mangoautomation.net/repository/ias-release"}
+                 "ias-releases" "https://maven.mangoautomation.net/repository/ias-release/"}
   :dependencies [[org.clojure/clojure "1.9.0"]
-                 [com.serotonin/bacnet4j "4.1.4"]
+                 [com.serotonin/bacnet4j "4.1.6"]
                  [clj-serial "2.0.3"]
                  [clj-time "0.14.2"]
                  [org.slf4j/slf4j-log4j12 "1.8.0-beta0"]]
