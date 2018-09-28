@@ -7,7 +7,7 @@
                  "ias-releases" "https://maven.mangoautomation.net/repository/ias-release/"}
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [com.serotonin/bacnet4j "4.1.6"]
-                 [clj-serial "2.0.3"]
+                 [clj-serial "2.0.5"]
                  [clj-time "0.14.2"]
                  [org.slf4j/slf4j-log4j12 "1.8.0-beta0"]]
   :repl-options {:init-ns user}
