@@ -15,7 +15,8 @@
      (ld/maybe-register-as-foreign-device! device-id)
      (ld/i-am-broadcast!)
      (future (rd/discover-network)
-             true))))
+             true)
+     )))
 
 
 (defn find-bacnet-port
@@ -96,7 +97,7 @@
   ([local-device-id device-id object-identifiers properties]
    (->> (remote-object-properties-with-error local-device-id device-id object-identifiers properties)
         (map (fn [m] (->> (for [[k v] m
-                                :when (not (when (map? v) (:error v)))]
+                                :when (not (:error-class v))]
                             [k v])
                           (into {})))))))
 
