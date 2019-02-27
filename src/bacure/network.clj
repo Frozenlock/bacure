@@ -128,6 +128,12 @@
       :master (create-master-node com-port input-stream output-stream mstp-config)
       :slave  (create-slave-node com-port input-stream output-stream node-id))))
 
+(defn mstp-listener-network [receive-npdu-fn node local-network-number]
+  (proxy [MstpNetwork] [node local-network-number]
+    (parseNpduData [byte-queue link-service]
+      (receive-npdu-fn (-> byte-queue .peekAll))
+      (proxy-super parseNpduData byte-queue link-service))))
+
 (defn create-mstp-network
   "Return an MstpNetwork object, configured with either a slave or a master node
   for the local-device. This class does not have a dedicated 'builder' like the
@@ -135,6 +141,9 @@
   [{:keys [local-network-number mstp-config]
     :as   device-config}]
 
-  (let [mstp-config (merge default-mstp-config mstp-config)
-        node        (create-mstp-node device-config mstp-config)]
-    (MstpNetwork. node local-network-number)))
+  (let [{:keys [listener? receive-npdu-fn]
+         :as   mstp-config} (merge default-mstp-config mstp-config)
+        node                (create-mstp-node device-config mstp-config)]
+    (if listener?
+      (mstp-listener-network receive-npdu-fn node local-network-number)
+      (MstpNetwork. node local-network-number))))
