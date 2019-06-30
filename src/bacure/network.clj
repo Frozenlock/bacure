@@ -93,7 +93,8 @@
         (.withBroadcast broadcast-address 0) ;;; <--- need to come back to the network-prefix
         (.withLocalBindAddress local-address)
         (.withLocalNetworkNumber (int local-network-number))
-        (.withPort (int port)))
+        (.withPort (int port))
+        (.withReuseAddress reuse-address))
       (.build)))
 
 (defn- create-master-node
