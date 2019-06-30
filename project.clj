@@ -1,4 +1,4 @@
-(defproject bacure "1.1.0-alpha2"
+(defproject bacure "1.1.1-alpha"
   :description "A Clojure wrapper for the bacnet4j library... and some nice additions."
   :url "https://hvac.io"
   :license {:name "GNU General Public License V3"
@@ -6,7 +6,7 @@
   :repositories {"ias-snapshots" "https://maven.mangoautomation.net/repository/ias-snapshot/"
                  "ias-releases" "https://maven.mangoautomation.net/repository/ias-release/"}
   :dependencies [[org.clojure/clojure "1.9.0"]
-                 [com.serotonin/bacnet4j "4.1.6"]
+                 [com.infiniteautomation/bacnet4j "5.0.0"]
                  [clj-serial "2.0.5"]
                  [clj-time "0.14.2"]
                  [org.slf4j/slf4j-log4j12 "1.8.0-beta0"]]
@@ -20,13 +20,4 @@
                    :plugins [[lein-ancient "0.6.15"]]}}
 
   ;; Use a higher loglevel (up to 6) to debug clj-serial
-  :jvm-opts ["-Dpurejavacomm.loglevel=0"]
-
-  )
-
-;; Uncomment if problem donwloading from Mango's repo.
-;; (Tho it's a very bad idea)
-;; Mangoautomation's Maven server doesn't use TLS?!
-;(require 'cemerick.pomegranate.aether)
-;; (cemerick.pomegranate.aether/register-wagon-factory!
-;;    "http" #(org.apache.maven.wagon.providers.http.HttpWagon.))
+  :jvm-opts ["-Dpurejavacomm.loglevel=0"])
