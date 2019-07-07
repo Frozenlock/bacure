@@ -127,11 +127,11 @@
     tp))
 
 (defn new-local-device!
-  "Return a new configured BACnet local device . (A device is required
-  to communicate over the BACnet network.). Use the function
-  'initialize' and 'terminate' to bind and unbind the device to the
-  BACnet port. If needed, the initial configurations are associated
-  with the keyword :init-configs inside the local-device map.'
+  "Create a new device and return its ID. (A device is required to
+  communicate over the BACnet network.). Use the function 'initialize'
+  and 'terminate' to bind and unbind the device to the BACnet port. If
+  needed, the initial configurations are associated with the
+  keyword :init-configs inside the local-device map.'
 
   See README for more information about how to specify configs-map."
   ([] (new-local-device! nil))
@@ -143,7 +143,8 @@
          serial-connection (if (some? com-port)
                              (serial/get-opened-serial-connection! configs))
          network (case (:network-type configs)
-                   :ipv4 (net/ip-network-builder configs)
+                   :ipv4 (doto (net/ip-network-builder configs)
+                           (.enableBBMD))
                    :mstp (net/create-mstp-network configs))
 
          tp      (get-transport network configs)
@@ -169,6 +170,40 @@
                                                        :local-address local-address})})
      (update-configs! device-id configs)
      device-id)))
+
+;;;;;;
+
+(defn add-object!
+  "Add the object map to the local device. Returns an object map."
+  ([object-map] (add-object! nil object-map))
+  ([device-id object-map]
+   (let [ldo (local-device-object device-id)
+         bacnet-object (c/clojure->bacnet :bacnet-object (c-obj/bacnet-object-with-local-device object-map ldo))]
+     (.addObject ldo bacnet-object)
+     (c/bacnet->clojure bacnet-object))))
+
+(defn remove-object!
+  ([object-identifier] (remove-object! nil object-identifier))
+  ([device-id object-identifier]
+   (some-> (local-device-object device-id)
+           (.removeObject (c/clojure->bacnet :object-identifier object-identifier)))))
+
+(defn local-objects
+  "Return a list of all the local objects."
+  ([] (local-objects nil))
+  ([device-id]
+   (some->> (local-device-object device-id)
+            (.getLocalObjects)
+            (map c/bacnet->clojure))))
+
+(defn object
+  "Return a local object"
+  ([object-identifier] (object nil object-identifier))
+  ([device-id object-identifier]
+   (some-> (local-device-object device-id)
+           (.getObject (c/clojure->bacnet :object-identifier object-identifier)))))
+
+
 
 ;;;;;;
 
@@ -291,15 +326,18 @@
                              (for [id# (list-local-devices)
                                    :when (.isInitialized (local-device-object id#))] id#))]
      (terminate-all!)
-     (let [result# (atom nil)]
+     (let [result# (atom nil)
+           error# (atom nil)]
        (with-redefs [state/local-devices (atom {})]
          (try (reset! result# (do ~@body))
               (catch Exception e#
-                (println (str "Error: " (.getMessage e#))))
+                (reset! error# e#))
               (finally (terminate-all!))))
        (doseq [id# initiated-devices#]
          (initialize! id#))
-       @result#)))
+       (if-let [err# @error#]
+         (throw err#)
+         @result#))))
 
 (defn local-device-backup
   "Get the necessary information to create a local device backup."

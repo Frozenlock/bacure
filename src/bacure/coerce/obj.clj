@@ -136,12 +136,43 @@
 ;;;
 
 
-;; (defmethod bacnet->clojure BACnetObject
-;;   [^BACnetObject o]
-;;   (let [properties-id (seq (:properties (bean o)))]
-;;       ;; doesn't seem to be a java method to get the properties list.
-;;       ;; Hopefully `bean' won't be much of a drag
-;;       (into {}
-;;             (for [p-id properties-id]
-;;               (when-let [prop-value (bacnet->clojure (.getProperty o p-id))]
-;;                 [(bacnet->clojure p-id) prop-value])))))
+(defmethod bacnet->clojure BACnetObject
+  [^BACnetObject o]
+  ;; unfortunately there doesn't appear to be a method retrieve all
+  ;; the object properties at once. While it might be a little
+  ;; wasteful, the most straightforward alternative appears to try to
+  ;; get the value of all the possible properties for the given object
+  ;; type.
+  (let [[object-type object-instance] (c/bacnet->clojure (.getId o))
+        possible-properties           (properties-by-option object-type :all)]
+    (with-meta
+      (->> (for [prop  possible-properties
+                 :let  [value (.get o (c/clojure->bacnet :property-identifier prop))]
+                 :when value]
+             [prop (c/bacnet->clojure value)])
+           (into {}))
+      ;; add the local device as metadata to ease the round-trip from Clojure to BACnet
+      {::local-device (.getLocalDevice o)})))
+
+;; The local device 'addObject' method expects a BACnetObject.
+;; However, the BACnetObject needs a local device to be initiated.
+;; This means that we can't really have a pure 'data' bacnet-object.
+
+(defn bacnet-object-with-local-device
+  "Add a local device to the map metadata to allow conversion (and
+  automatic object creation) to BACnet."
+  [object-map local-device-object]
+  (with-meta object-map {::local-device local-device-object}))
+
+(defmethod clojure->bacnet :bacnet-object
+  [_ value]
+  (if-let [local-device (::local-device (meta value))]
+    (let [bacnet-object (BACnetObject. local-device
+                                       (c/clojure->bacnet :object-identifier (:object-identifier value)))]
+      ;; now write the values
+      (doseq [[property value] (encode-properties-values value)]
+        (.writePropertyInternal bacnet-object (c/clojure->bacnet :property-identifier property)
+              value))
+      bacnet-object)
+    (throw (Exception. (str "Missing local device in the object-map with identfier : " (:object-identifier value)
+                            "\nMake sure to use the local device function 'add-object!'")))))
