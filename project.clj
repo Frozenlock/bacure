@@ -8,7 +8,7 @@
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [com.infiniteautomation/bacnet4j "5.0.0"]
                  [clj-serial "2.0.5"]
-                 [clj-time "0.14.2"]
+                 [clj-time "0.15.0"]
                  [org.slf4j/slf4j-log4j12 "1.8.0-beta0"]]
   :repl-options {:init-ns user}
   :plugins [[lein-codox "0.9.5"]]
