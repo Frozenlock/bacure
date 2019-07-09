@@ -4,7 +4,7 @@ A clojure library wrapping the excellent BACnet4J library. Hopefully
 it will be able to abstract some of the ugly BACnet details
 (datatypes) and provide a seamless Clojure experience.
 
-<!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
+<!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-generate-toc again -->
 **Table of Contents**
 
 - [Bacure](#bacure)
@@ -18,13 +18,6 @@ it will be able to abstract some of the ugly BACnet details
         - [Multiple local devices](#multiple-local-devices)
         - [Data coercion](#data-coercion)
         - [Debugging Serial / MSTP](#debugging-serial--mstp)
-    - [Changelogs](#changelogs)
-        - [1.0.8](#108)
-        - [1.0.6](#106)
-        - [1.0.4 - 1.0.5](#104---105)
-        - [1.0.2 - 1.0.3](#102---103)
-        - [1.0.1](#101)
-        - [1.0](#10)
     - [License](#license)
 
 <!-- markdown-toc end -->
@@ -47,7 +40,7 @@ This will create a new local device, bind it to a network interface
 and search for other BACnet devices.
 
 #### IPv4
-The default boot-up! behavior uses IPv4. If you need to specify an interface
+The default `boot-up!` behavior uses IPv4. If you need to specify an interface
 (for example if you have an Ethernet port AND a Wifi on your computer), use the
 broadcast address associated with the interface.
 
@@ -212,55 +205,9 @@ ProTip: Don't use Wireshark /
 while running this on your PC. I thought the code was broken for the longest
 time until I realized that mstpcap was somehow interfering with the frames.
 
-## Changelogs
-
-### 1.1.0 (to be released)
-- Update BACnet4J to 4.0.1
-- Add MSTP support! (Thanks to Alex Whitt)
-
-
-### 1.0.8
-- Bugfix in underlying BACnet4J library : endless loop on segmented
-  communication error.
-
-### 1.0.6
-- Better communication with slow networks and/or large requests.
-
-### 1.0.4 - 1.0.5
-- Add coercion for BaseError type;
-- Handle `property` error. (Example: unknown-property).
-
-### 1.0.2 - 1.0.3
-- Fix segmentation fallback
-- Longer delay between broadcasts (initialization)
-
-### 1.0.1
-Minor changes.
-
-- use forked BACnet4j version;
-- re-add the function `is-alive?`;
-- add funtion to write multiple properties;
-- handle 'rejects' error;
-- fix `encode-properties` function;
-- add function to read trendlogs.
-
-### 1.0
-
-Major changes.
-
-It is expected that you will have to change a few function names if
-you are transistionning from 0.6 or below. You can use the
-[documentation](http://frozenlock.github.io/bacure/index.html) to help
-you find the new function names.
-
-
-- Data coercion into BACnet4J objects have been redone from scratch;
-- Support multiple local devices;
-- Removed the functions related to local objects;
-- Removed caching for read-properties (shouldn't be up to Bacure.)
 
 ## License
 
-Copyright © 2016 Frozenlock
+Copyright © 2019 Frozenlock
 
 GNU General Public License version 3.0 (GPLv3)
