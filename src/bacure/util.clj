@@ -39,7 +39,7 @@
   ;; font
   (put 'defnd 'clojure-doc-string-elt 2))
 
-(defn validate-arglists [arglists]
+(defn- arglists-valid? [arglists]
   (every? #(= (first %) 'local-device-id) arglists))
 
 (alter-meta!
@@ -56,7 +56,7 @@
           fn#       (var-get fn-var#)
           meta#     (meta fn-var#)
           arglists# (sort-by count (:arglists meta#))]
-      (if (validate-arglists arglists#)
+      (if (arglists-valid? arglists#)
         (-> (concat
              (->> (list 'defn (:name meta#) (:doc meta#)) ;; (defn some-symbol docstring
                   (remove nil?)) ;; remove the docstring if missing
