@@ -66,11 +66,18 @@
               (is (= [:device rd-id] (some-> result (get :object-list))))
 
               (testing "Read Property Multiple"
-                (let [multi-read (rp/read-property-multiple ld-id rd-id obj-prop-references)                      
+                (let [multi-read (rp/read-property-multiple ld-id rd-id obj-prop-references)
                       {:keys [object-name protocol-version protocol-revision object-list] :as results}
                       (first multi-read)]
                   ;; result of reading individually or in bulk should be the same
                   (is (= indiv-read multi-read))))))))
+
+      (testing "Set property"
+        ;; set a remote property
+        (let [test-string "This is a test"]
+          (rd/set-remote-property! ld-id rd-id [:device rd-id] :description test-string)
+          (is (= (:description (first (rp/read-properties ld-id rd-id [[[:device rd-id] :description]])))
+                 test-string))))
 
       (testing "Create/delete object"
         ;; first we delete an objects that doesn't exist. We should get an error
