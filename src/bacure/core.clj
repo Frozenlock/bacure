@@ -13,8 +13,8 @@
    (let [device-id (:device-id configs)]
      (ld/load-local-device-backup! device-id configs)
      (ld/maybe-register-as-foreign-device! device-id)
-     (ld/i-am-broadcast!)
-     (future (rd/discover-network)
+     (ld/i-am-broadcast! device-id)
+     (future (rd/discover-network device-id)
              true)
      )))
 
