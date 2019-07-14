@@ -59,7 +59,7 @@
           (testing "Read individually"
             ;; Reading individually means that each
             ;; object-property-reference is requested separately, then
-            ;; merge into objects maps.
+            ;; merged into objects maps.
             (let [indiv-read (rp/read-individually ld-id rd-id obj-prop-references)
                   {:keys [object-name protocol-version protocol-revision] :as result} (first indiv-read)]
               (is (and object-name protocol-version protocol-revision))
