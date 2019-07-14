@@ -47,8 +47,8 @@
   (let [interfaces (get-interfaces)]
     (->> (for [i interfaces]
            (when-let [ips (seq (ipv4-from-interface i))]
-             {:interface (.getName i) :ips ips :broadcast-address (get-broadcast-address-of-interface i)
-              }))
+             (when-let [broadcast-address (get-broadcast-address-of-interface i)]
+               {:interface (.getName i) :ips ips :broadcast-address broadcast-address})))
          (remove nil?))))
 
 (defn get-any-ip
