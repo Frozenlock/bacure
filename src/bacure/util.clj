@@ -39,7 +39,7 @@
   ;; font
   (put 'defnd 'clojure-doc-string-elt 2))
 
-(defn- arglists-valid? [arglists]
+(defn arglists-valid? [arglists]
   (every? #(= (first %) 'local-device-id) arglists))
 
 (alter-meta!
