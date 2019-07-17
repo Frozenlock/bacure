@@ -44,18 +44,31 @@
   (-> (.getSegmentationSupported (rd local-device-id device-id))
       c/bacnet->clojure))
 
+
+(def ^:private extended-information-properties
+  [:protocol-services-supported
+   :object-name
+   :protocol-version
+   :protocol-revision])
+
+(defn- get-device-property [device-object property-identifier]
+  (-> (.getDeviceProperty device-object (c/clojure->bacnet :property-identifier property-identifier))
+      (c/bacnet->clojure)))
+
+(defn- set-device-property! [device-object property-identifier value]
+  (.setDeviceProperty device-object
+                      (c/clojure->bacnet :property-identifier property-identifier)
+                      (obj/encode-property-value :device property-identifier value)))
+
 (defnd cached-extended-information
   "Return the cached remote device extended information. Nil if we have nothing."
   [local-device-id device-id]
   (when-let [device (rd local-device-id device-id)]
     ;; we got the 'extended info' when we have the services supported.
     (when (.getName device)
-      {:protocol-services-supported (c/bacnet->clojure (.getServicesSupported device))
-       :object-name                 (c/bacnet->clojure (.getName device))
-       ;;----- removed in bacnet4j 4.0.0 ?! -----
-       ;:protocol-version (c/bacnet->clojure (.getProtocolVersion device))
-       ;:protocol-revision (c/bacnet->clojure (.getProtocolRevision device))
-       })))
+      (->> (for [p-id extended-information-properties]
+             [p-id (get-device-property device p-id)])
+           (into {})))))
 
 (defnd retrieve-extended-information!
   "Retrieve the remote device extended information (name, segmentation,
@@ -70,14 +83,14 @@
                                                                      :protocol-services-supported]])
                    (first)
                    (:protocol-services-supported))]
-      (.setServicesSupported dev (c/clojure->bacnet :services-supported services))
+      (set-device-property! dev :protocol-services-supported services)
       ;; then we can query for more info
-      (let [result (first (rp/read-properties local-device-id device-id
-                                              [ [[:device device-id] :object-name
+      (let [remaining-properties (remove #{:protocol-services-supported} extended-information-properties)
+            result (first (rp/read-properties local-device-id device-id
+                                              [[[:device device-id] :object-name
                                                  :protocol-version :protocol-revision]]))]
-        (.setName dev (:object-name result))
-        (.setProtocolVersion dev (c/clojure->bacnet :unsigned-integer (:protocol-version result)))
-        (.setProtocolRevision dev (c/clojure->bacnet :unsigned-integer (:protocol-revision result))))
+        (doseq [[k v] result]
+          (set-device-property! dev k v)))
       (cached-extended-information local-device-id device-id))))
 
 (defnd extended-information
