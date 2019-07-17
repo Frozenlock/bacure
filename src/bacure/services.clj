@@ -37,9 +37,7 @@
 
                                       com.serotonin.bacnet4j.apdu.Abort
                                       {:abort (let [reason (.getAbortReason ack-APDU-error)]
-                                                {:abort-reason (->> reason
-                                                                    (c/clojure->bacnet :abort-reason)
-                                                                    (c/bacnet->clojure))})}
+                                                {:abort-reason (c/bacnet->clojure reason)})}
 
                                       com.serotonin.bacnet4j.apdu.Reject
                                       {:reject (let [reason (.getRejectReason ack-APDU-error)]
@@ -49,7 +47,10 @@
                                       {:error (some-> (.getError ack-APDU-error)
                                                       (c/bacnet->clojure))})))))
     (ex [this bacnet-exception]
-      (deliver return-promise {:timeout {:timeout-error bacnet-exception}}))))
+      ;; any other error
+      (deliver return-promise (try (some-> (.getBacnetError bacnet-exception)
+                                           (c/bacnet->clojure))
+                                   (catch Exception e bacnet-exception))))))
 
 (defn send-request-promise
   "Send the request to the remote device.
@@ -74,8 +75,9 @@
      ;; bacnet4j seems a little icky when dealing with timeouts...
      ;; better handling it ourself.
      (future (do (Thread/sleep (+ timeout 1000))
-                 (deliver return-promise {:timeout "The request timed out. The remote device might not be on the network anymore."})))
-     @return-promise)))
+                 (deliver return-promise {:timeout (str "The device "device-id " didn't respond in time.")})))
+     (try @return-promise
+          (catch Exception e (println "ERROR : " (.getMessage e)))))))
 
 (defn send-who-is
   [local-device-id {:keys [min-range max-range]
