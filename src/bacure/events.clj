@@ -125,7 +125,7 @@
 
     (state/assoc-in-local-device! local-device-id events-cache-ks (conj events event))))
 
-(defn- get-unconfirmed-event-listener
+(defn unconfirmed-event-listener
   "Listens to IAm, IHave, and COV events and updates a cache with the results"
   [local-device-id]
 
@@ -147,12 +147,12 @@
                                initiating-device-identifier monitored-object-identifier
                                time-remaining list-of-values))))
 
-;; Local device setup
-(defn add-listener!
-  [local-device-object local-device-id]
+; ;; Local device setup
+; (defn add-listener!
+;   [local-device-object local-device-id]
 
-  (let [listener (get-unconfirmed-event-listener local-device-id)]
+;   (let [listener (unconfirmed-event-listener local-device-id)]
 
-    (-> local-device-object
-        (.getEventHandler)
-        (.addListener listener))))
+;     (-> local-device-object
+;         (.getEventHandler)
+;         (.addListener listener))))

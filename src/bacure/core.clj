@@ -2,8 +2,8 @@
   (:require [bacure.local-device :as ld]
             [bacure.remote-device :as rd]
             [bacure.read-properties :as rp]
-            [clojure.walk :as walk]))
-
+            [clojure.walk :as walk]
+            [bacure.events :as events]))
    
 (defn boot-up!
   "Create a local-device, load its config file, initialize it, and
@@ -13,10 +13,12 @@
    (let [device-id (:device-id configs)]
      (ld/load-local-device-backup! device-id configs)
      (ld/maybe-register-as-foreign-device! device-id)
+     ;; automatcially fetch extended info when receiving a IAm
+     (->> (rd/IAm-received-auto-fetch-extended-information device-id)
+          (ld/add-listener! device-id))
      (ld/i-am-broadcast! device-id)
      (future (rd/discover-network device-id)
-             true)
-     )))
+             true))))
 
 
 (defn find-bacnet-port

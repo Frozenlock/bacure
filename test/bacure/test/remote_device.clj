@@ -33,6 +33,17 @@
             (is (= expected-result 
                    (rp/expand-array ld-id rd-id [:device rd-id] :object-list)))))))))
 
+(deftest extended-information
+  (ld/with-temp-devices
+    (init-local-test-devices!)
+    (let [ld-id 1
+          rd-id 2]
+      ;; initially we shouldn't have this data
+      (is (= nil (rd/cached-extended-information ld-id rd-id)))
+      ;; now try to retrieve it
+      (let [data (rd/extended-information ld-id rd-id)]
+        (is (:protocol-services-supported data))
+        (is (:object-name data))))))
 
 (deftest read-properties
   (ld/with-temp-devices
@@ -44,10 +55,9 @@
           (str "This test requires a device with ID "rd-id " on the network."))
       
       (testing "Read properties" 
-        ;; after discovering the network, we should have remote device
-        ;; extended information (mostly to know if we can use
+        ;; Get the extended information (mostly to know if we can use
         ;; readPropertyMultiple)."
-        (is (= (get-in (rd/extended-information ld-id rd-id) 
+        (is (= (get-in (rd/extended-information ld-id rd-id)
                        [:protocol-services-supported :read-property])
                true))
         ;; we try a few reads

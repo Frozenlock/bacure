@@ -65,10 +65,12 @@
   [local-device-id device-id]
   (when-let [device (rd local-device-id device-id)]
     ;; we got the 'extended info' when we have the services supported.
-    (when (.getName device)
-      (->> (for [p-id extended-information-properties]
-             [p-id (get-device-property device p-id)])
-           (into {})))))
+    (some->> (for [p-id extended-information-properties
+                   :let [value (get-device-property device p-id)]
+                   :when value]
+               [p-id value])
+             (seq)
+             (into {}))))
 
 (defnd retrieve-extended-information!
   "Retrieve the remote device extended information (name, segmentation,
@@ -99,6 +101,13 @@
   [local-device-id device-id]
   (or (cached-extended-information local-device-id device-id)
       (retrieve-extended-information! local-device-id device-id)))
+
+(defn IAm-received-auto-fetch-extended-information
+  "Listen to IAm and try to fetch extended-information."
+  [local-device-id]
+  (proxy [DeviceEventAdapter] []
+    (iAmReceived [remote-device]
+      (extended-information local-device-id (.getInstanceNumber remote-device)))))
 
 (defnd remote-devices
   "Return the list of the current remote devices. These devices must

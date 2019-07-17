@@ -126,6 +126,13 @@
       (.setSegTimeout tp seg-timeout))
     tp))
 
+(defn add-listener!
+  [local-device-id listener]
+  (when-let [ldo (local-device-object local-device-id)]
+    (some-> (local-device-object local-device-id)
+            (.getEventHandler)
+            (.addListener listener))))
+
 (defn new-local-device!
   "Create a new device and return its ID. (A device is required to
   communicate over the BACnet network.). Use the function 'initialize'
@@ -149,14 +156,12 @@
 
          tp      (get-transport network configs)
          ld      (LocalDevice. device-id tp)]
-     ;; add the new local-device (and its configuration) into the
-     ;; local devices table.
-
-     (events/add-listener! ld device-id)
 
      (when (get-local-device device-id)
        (terminate! device-id))
 
+     ;; add the new local-device (and its configuration) into the
+     ;; local devices table.
      (state/assoc-local-device! device-id
                                 {:bacnet4j-local-device ld
                                  :serial-connection serial-connection
@@ -169,6 +174,9 @@
                                                        :port port
                                                        :local-address local-address})})
      (update-configs! device-id configs)
+
+     (add-listener! device-id (events/unconfirmed-event-listener device-id))
+
      device-id)))
 
 ;;;;;;
@@ -263,7 +271,7 @@
 
 (defn initialize!
   "Initialize the local device. This will bind it to it's port (most
-  likely 47808), send a WhoIsrequest and load any programs available
+  likely 47808), send a WhoIsRequest and load any programs available
   for the local-device. The port will remain unavailable until the
   device is terminated. Once terminated, you should discard the device
   and create a new one if needed.
