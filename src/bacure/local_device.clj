@@ -263,10 +263,10 @@
 
 (defn initialize!
   "Initialize the local device. This will bind it to it's port (most
-  likely 47808) and load any programs available for the local-device.
-  The port will remain unavailable until the device is terminated.
-  Once terminated, you should discard the device and create a new one
-  if needed.
+  likely 47808), send a WhoIsrequest and load any programs available
+  for the local-device. The port will remain unavailable until the
+  device is terminated. Once terminated, you should discard the device
+  and create a new one if needed.
 
   For more information on the local-device 'programs' operations, see
   the bacure.local-save namespace.
