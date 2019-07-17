@@ -21,6 +21,10 @@
   (is (= (bacnet->clojure (clojure->bacnet :date "2016-01-16"))
          "2016-01-16")))
 
+(deftest test-enumerated
+  (is (= (bacnet->clojure (clojure->bacnet :enumerated 10))
+         10)))
+
 (deftest test-double
   (is (= (bacnet->clojure (clojure->bacnet :double 10))
          10.0)))

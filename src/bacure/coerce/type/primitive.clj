@@ -11,6 +11,7 @@
             ;; Boolean    ;; namespace clash... just use the full name            
             CharacterString
             Date
+            Enumerated
             ;; Double ;; namespace clash... just use the full name
             ObjectIdentifier
             OctetString
@@ -91,6 +92,20 @@
    (t/date-time (+ 1900 (.getYear o))
                             (.getId (.getMonth o))
                             (.getDay o))))
+
+;;;
+
+(defn c-enumerated [number]
+  (com.serotonin.bacnet4j.type.primitive.Enumerated. (or number 0)))
+
+(defmethod clojure->bacnet :enumerated
+  [_ value]
+  (c-enumerated value))
+
+(defmethod bacnet->clojure com.serotonin.bacnet4j.type.primitive.Enumerated
+  [^com.serotonin.bacnet4j.type.primitive.Enumerated o]
+  (.intValue o))
+
 
 ;;;
 
