@@ -73,8 +73,8 @@
                            (throw (Exception. "Can't send request while the device isn't initialized.")))]
      ;; bacnet4j seems a little icky when dealing with timeouts...
      ;; better handling it ourself.
-     ;; (future (do (Thread/sleep (+ timeout 1000))
-     ;;             (deliver return-promise {:timeout "The request timed out. The remote device might not be on the network anymore."})))
+     (future (do (Thread/sleep (+ timeout 1000))
+                 (deliver return-promise {:timeout "The request timed out. The remote device might not be on the network anymore."})))
      @return-promise)))
 
 (defn send-who-is
