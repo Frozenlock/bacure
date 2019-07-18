@@ -99,7 +99,8 @@
   ([local-device-id device-id object-identifiers properties]
    (->> (remote-object-properties-with-error local-device-id device-id object-identifiers properties)
         (map (fn [m] (->> (for [[k v] m
-                                :when (not (:error-class v))]
+                                :when (not (or (:error v) ;usual error
+                                               (:error-class v)))]  ; error inside log-buffer... why is it different?
                             [k v])
                           (into {})))))))
 
