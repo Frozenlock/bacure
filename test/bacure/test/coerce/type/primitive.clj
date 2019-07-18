@@ -78,7 +78,10 @@
 (deftest test-unsigned-integer
   (is (= (-> (clojure->bacnet :unsigned-integer 12)
              (bacnet->clojure))
-         12)))
+         12))
+  (is (= (-> (clojure->bacnet :unsigned-integer -1)
+             (bacnet->clojure))
+         Integer/MAX_VALUE)))
 
 (deftest test-primitive
   (is (= (clojure->bacnet :object-identifier [:analog-input 0])

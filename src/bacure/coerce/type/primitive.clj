@@ -267,7 +267,15 @@
 
 
 (defn c-unsigned-integer [value]
-  (UnsignedInteger. (int (or value 0))))
+  ;; We test for negative values because that's what the 'bacserv'
+  ;; tool sends. However I'm not sure it's supposed to be supported,
+  ;; as BACnet4J throws an error if we try to create an unisgned
+  ;; integer with a negative number.
+  (let [new-val (let [i (int (or value 0))]
+                  (if (< i 0)
+                    Integer/MAX_VALUE
+                    i))]
+    (UnsignedInteger. new-val)))
 
 (defmethod clojure->bacnet :unsigned-integer
   [_ value]
