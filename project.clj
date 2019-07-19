@@ -20,11 +20,10 @@
                  [clj-time "0.15.0"]
                  [org.slf4j/slf4j-log4j12 "1.7.26"]]
   :repl-options {:init-ns user}
-  :plugins [[lein-codox "0.9.5"]]
-  :codox {:doc-paths ["docs"]
-          :source-uri "https://github.com/Frozenlock/bacure/blob/master/{filepath}#L{line}"
-          ;; :src-linenum-anchor-prefix "L"
-          }
+  :plugins [[lein-codox "0.10.7"]]
+  :codox {;; see https://github.com/weavejester/codox/wiki/Deploying-to-GitHub-Pages
+          :output-path "codox"
+          :source-uri "https://github.com/Frozenlock/bacure/blob/{version}/{filepath}#L{line}"}
   :profiles {:dev {:source-paths ["dev"]
                    :plugins [[lein-ancient "0.6.15"]]}}
 
