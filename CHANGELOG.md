@@ -3,7 +3,7 @@
 ## [1.1.1] - 2019-07-19
 - Update BACnet4J to 5.0.0-1;
 - Add MSTP support! (Thanks to Alex Whitt);
-- Don't offer potentital interfaces without a broadcast address (should avoid problems with OpenVPN);
+- Don't offer potential interfaces without a broadcast address (should avoid problems with OpenVPN);
 - More reliable fallbacks when communicating with remote devices.
 
 ## 1.0.8
