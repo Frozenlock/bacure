@@ -16,7 +16,7 @@
      ;; automatcially fetch extended info when receiving a IAm
      (->> (rd/IAm-received-auto-fetch-extended-information device-id)
           (ld/add-listener! device-id))
-     (ld/i-am-broadcast! device-id)
+     ;(ld/i-am-broadcast! device-id) ; <--- not necessary if we send a global WhoIS, as we will send an IAm in response.
      (future (rd/discover-network device-id)
              true))))
 
