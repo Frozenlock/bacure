@@ -78,22 +78,24 @@
 
   Return the cached extended information."
   [local-device-id device-id]
-  (let [dev (rd local-device-id device-id)]
+  (when-let [dev (rd local-device-id device-id)]
     ;; first step is to see if the device support read-property-multiple to enable faster read
-    (when-let [services ;; don't do anything else if we can't get the protocol supported
-               (-> (rp/read-individually local-device-id device-id [[[:device device-id]
-                                                                     :protocol-services-supported]])
-                   (first)
-                   (:protocol-services-supported))]
-      (set-device-property! dev :protocol-services-supported services)
-      ;; then we can query for more info
-      (let [remaining-properties (remove #{:protocol-services-supported} extended-information-properties)
-            result (first (rp/read-properties local-device-id device-id
-                                              [[[:device device-id] :object-name
-                                                 :protocol-version :protocol-revision]]))]
-        (doseq [[k v] result]
-          (set-device-property! dev k v)))
-      (cached-extended-information local-device-id device-id))))
+    (let [services ;; don't do anything else if we can't get the protocol supported
+          (-> (rp/read-individually local-device-id device-id [[[:device device-id]
+                                                                :protocol-services-supported]])
+              (first)
+              (:protocol-services-supported))]
+      (when-not (:error services)
+        (set-device-property! dev :protocol-services-supported services)
+        ;; then we can query for more info
+        (let [remaining-properties (remove #{:protocol-services-supported} extended-information-properties)
+              result               (first (rp/read-properties local-device-id device-id
+                                                              [[[:device device-id] :object-name
+                                                                :protocol-version :protocol-revision]]))]
+          (doseq [[k v] result]
+            (when-not (:error v)
+              (set-device-property! dev k v))))
+        (cached-extended-information local-device-id device-id)))))
 
 (defnd extended-information
   "Return the device extended information that we have cached locally,
