@@ -9,6 +9,7 @@
            (com.serotonin.bacnet4j.service.unconfirmed WhoIsRequest
                                                        WhoHasRequest
                                                        WhoHasRequest$Limits)
+           (com.serotonin.bacnet4j.exception ServiceTooBigException)
            (com.serotonin.bacnet4j.service.confirmed SubscribeCOVRequest)))
 
 ;;; bacnet4j introduced some kind of callbacks with the
@@ -48,9 +49,16 @@
                                                       (c/bacnet->clojure))})))))
     (ex [this bacnet-exception]
       ;; any other error
-      (deliver return-promise (try (some-> (.getBacnetError bacnet-exception)
-                                           (c/bacnet->clojure))
-                                   (catch Exception e bacnet-exception))))))
+      (state/set-request-response! bacnet-exception)
+      (deliver return-promise
+        (condp = (class bacnet-exception)
+          ServiceTooBigException {:error {:error-reason :service-too-big}}
+
+          ;; else
+          (try (some-> (.getBacnetError bacnet-exception)
+                       (c/bacnet->clojure))
+               (catch Exception e
+                 {:error {:raw-exception bacnet-exception}})))))))
 
 (defn send-request-promise
   "Send the request to the remote device.
