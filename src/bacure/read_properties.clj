@@ -69,10 +69,11 @@
 
 (defn size-related?
   "True if the abort reason is size related."
-  [abort-map]
-  (some #{(or (:abort-reason abort-map)
-              (:reject-reason abort-map))}
-        [:segmentation-not-supported :buffer-overflow]))
+  [read-result]
+  (some #{(or (get-in read-result [:abort :abort-reason])
+               (get-in read-result [:reject :reject-reason])
+               (get-in read-result [:error :error-reason]))}
+        [:segmentation-not-supported :buffer-overflow :service-too-big]))
 
 (defn read-single-property-with-fallback
   "Read a single property. If there's a size-related APDU error, will
@@ -88,7 +89,7 @@
         (or (:abort read-result)
             (:reject read-result))
 
-        (if (size-related? (or (:abort read-result) (:reject read-result)))
+        (if (size-related? read-result)
           (mapv (fn [result]
                   (or (get result :success)
                       (println (str "Read array error for " object-identifier " - " property-reference
@@ -340,12 +341,12 @@
 
           ;; size related for a single object.
           (and
-           (size-related? (or (:abort read-result) (:reject read-result)))
+           (size-related? read-result)
            (= (count obj-prop-references) 1) ;; single property
            (not expanded-array?)) ;; not an array index
 
           (do (println "Error for : " (first obj-prop-references)
-                       (size-related? (or (:abort read-result) (:reject read-result))))
+                       (size-related? read-result))
               (println "Trying to read as an array (in chunks).")
               (state/set-request-response! read-result)
               (let [expanded-array (apply (partial expand-array local-device-id device-id)
@@ -356,7 +357,7 @@
           ;; size related multiple objects or multiple properties
           (or (:split-opr read-result)
               (= :unrecognized-service (:reject-reason (:reject read-result)))
-              (and (size-related? (or (:abort read-result) (:reject read-result)))
+              (and (size-related? read-result)
                    (or (> (count obj-prop-references) 1) ;; too many objects
                        (> (count (first obj-prop-references)) 2)))) ;; too many properties
 
