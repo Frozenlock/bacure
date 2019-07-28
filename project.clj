@@ -1,4 +1,4 @@
-(defproject bacure "1.1.1"
+(defproject bacure "1.1.2"
   :description "A Clojure wrapper for the bacnet4j library... and some nice additions."
   :url "https://hvac.io"
   :license {:name "GNU General Public License V3"
@@ -17,14 +17,14 @@
                   :exclusions [org.slf4j/slf4j-api]]
 
                  [clj-serial "2.0.5"]
-                 [clj-time "0.15.0"]
-                 [org.slf4j/slf4j-log4j12 "1.7.26"]]
+                 [clj-time "0.15.0"]]
   :repl-options {:init-ns user}
   :plugins [[lein-codox "0.10.7"]]
   :codox {;; see https://github.com/weavejester/codox/wiki/Deploying-to-GitHub-Pages
           :output-path "codox"
           :source-uri "https://github.com/Frozenlock/bacure/blob/{version}/{filepath}#L{line}"}
   :profiles {:dev {:source-paths ["dev"]
+                   :dependencies [[org.slf4j/slf4j-log4j12 "1.7.26"]]
                    :plugins [[lein-ancient "0.6.15"]]}}
 
   ;; Use a higher loglevel (up to 6) to debug clj-serial

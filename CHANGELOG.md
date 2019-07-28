@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.1.2] - 2019-07-28
+- Remove log4j12 from dependency (it's only a dev dependency).
+
 ## [1.1.1] - 2019-07-19
 - Update BACnet4J to 5.0.0-1;
 - Add MSTP support! (Thanks to Alex Whitt);
