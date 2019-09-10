@@ -3,7 +3,7 @@
   (:import  (java.net InetSocketAddress
                       Inet4Address
                       InetAddress)
-            (com.serotonin.bacnet4j.transport.DefaultTransport)
+            (com.serotonin.bacnet4j.transport DefaultTransport)
             (com.serotonin.bacnet4j.npdu.ip IpNetwork
                                             IpNetworkBuilder)
             (com.serotonin.bacnet4j.npdu.mstp MasterNode
