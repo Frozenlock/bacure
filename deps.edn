@@ -1,0 +1,15 @@
+{:deps      {org.clojure/clojure             {:mvn/version "1.9.0"}
+             org.clojars.frozenlock/bacnet4j {:mvn/version "5.0.0-1"
+                                              :exclusions  [org.slf4j/slf4j-api 
+                                                            lohbihler/sero-scheduler]}
+             org.slf4j/slf4j-api             {:mvn/version "1.7.26"}
+             lohbihler/sero-scheduler        {:mvn/version "1.1.0"
+                                              :exclusions  [org.slf4j/slf4j-api]}
+             clj-serial                      {:mvn/version "2.0.5"}
+             clj-time                        {:mvn/version "0.15.0"}
+             org.slf4j/slf4j-log4j12         {:mvn/version "1.7.26"}}
+ :aliases   {:dev {:extra-paths ["dev"]}}
+ :paths     ["src"]
+ :jvm-opts  ["-Dpurejavacomm.loglevel=0"]
+ :mvn/repos {"ias-snapshots" {:url "https://maven.mangoautomation.net/repository/ias-snapshot/"}
+             "ias-releases"  {:url "https://maven.mangoautomation.net/repository/ias-release/"}}}
