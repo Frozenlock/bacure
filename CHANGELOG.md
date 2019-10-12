@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.1.3] - 2019-09-12
+## [1.1.3] - 2019-10-12
 - Update `:import` form to work with Clojure 1.10
 
 ## [1.1.2] - 2019-07-28
