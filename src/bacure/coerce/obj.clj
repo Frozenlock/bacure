@@ -39,7 +39,7 @@
      {:type type
       :optional (bacnet->clojure (.isOptional o))
       :required (bacnet->clojure (.isRequired o))
-      :sequence (when (or array collection list))}]))
+      :sequence (or array collection list)}]))
 
 (defn property-type-definitions
   "Given an object type, return the properties it should have, and if

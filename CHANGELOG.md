@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.1.4] - 2019-11-13
+- Fix property encoding for sequences (array/collection/list) such as weekly-schedule.
+
 ## [1.1.3] - 2019-10-12
 - Update `:import` form to work with Clojure 1.10
 
