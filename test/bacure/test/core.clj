@@ -12,3 +12,10 @@
         (ld/terminate! id)
         (is (not (.isInitialized (ld/local-device-object id))))))))
 
+(deftest device-update
+  (testing "Boot and update a local device"
+    (ld/with-temp-devices
+      (let [id 1332]
+        (b/boot-up! {:device-id id})
+        (b/boot-up! {:device-id id :broadcast-address "255.255.255.255"})
+        (is (.isInitialized (ld/local-device-object id)))))))

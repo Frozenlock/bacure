@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.1.5] - 2019-11-14
+- Allow sequential properties to be nil.
+
 ## [1.1.4] - 2019-11-13
 - Fix property encoding for sequences (array/collection/list) such as weekly-schedule.
 

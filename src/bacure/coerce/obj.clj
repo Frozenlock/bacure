@@ -104,7 +104,7 @@
              property-identifier
              "'. You can try to use the function `bacure.coerce.obj/force-type'."))) )
     (if (:sequence value-type)
-      (do (if-not (coll? naked-value)
+      (do (if-not (or (coll? naked-value) (nil? naked-value))
             (throw (Exception. (str "The property '"property-identifier "' requires a collection."))))
           (clojure->bacnet :sequence-of (map encode-fn naked-value)))
       (encode-fn naked-value))))
