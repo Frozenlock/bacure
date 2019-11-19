@@ -27,19 +27,21 @@
              (keyword))
    :property-identifier (bacnet->clojure (.getPropertyIdentifier o))
    :array (.isArray o)
+   :array-length (.getArrayLength o)
    :collection (.isCollection o)
    :list (.isList o)})
 
 
 (defmethod bacnet->clojure ObjectPropertyTypeDefinition
   [^ObjectPropertyTypeDefinition o]
-  (let [{:keys [property-identifier type array collection list]}
+  (let [{:keys [property-identifier type array collection list array-length]}
         (bacnet->clojure (.getPropertyTypeDefinition o))]
     [property-identifier
      {:type type
       :optional (bacnet->clojure (.isOptional o))
       :required (bacnet->clojure (.isRequired o))
-      :sequence (or array collection list)}]))
+      :sequence (or array collection list)
+      :array-length array-length}]))
 
 (defn property-type-definitions
   "Given an object type, return the properties it should have, and if
@@ -96,17 +98,21 @@
                       (::forced-type value))
         type-keyword (or forced-type (:type value-type))
         encode-fn (partial clojure->bacnet type-keyword)
-        naked-value (if forced-type (:value value) value)]
+        naked-value (if forced-type (:value value) value)
+        length (:array-length value-type)
+        pad (fn [coll]
+              (when (> length 0)
+                (take length (concat coll (repeat nil)))))]
     (if-not type-keyword
       (throw
        (Exception.
         (str "Couldn't find the type associated with property '"
              property-identifier
-             "'. You can try to use the function `bacure.coerce.obj/force-type'."))) )
+             "'. You can try to use the function `bacure.coerce.obj/force-type'."))))
     (if (:sequence value-type)
-      (do (if-not (or (coll? naked-value) (nil? naked-value))
-            (throw (Exception. (str "The property '"property-identifier "' requires a collection."))))
-          (clojure->bacnet :sequence-of (map encode-fn naked-value)))
+      (if (not (or (nil? naked-value) (coll? naked-value)))
+        (throw (Exception. (str "The property '"property-identifier "' requires a collection.")))
+        (clojure->bacnet :sequence-of (map encode-fn (pad naked-value))))
       (encode-fn naked-value))))
 
 (defn encode-properties-values
