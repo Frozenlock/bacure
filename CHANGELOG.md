@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.1.6] - 2019-12-05
+- Add coercion for `write-property-multiple-error`.
+  (A write request with this error would timeout instead of immediately return the error.)
+
 ## [1.1.5] - 2019-11-14
 - Allow sequential properties to be nil.
 
