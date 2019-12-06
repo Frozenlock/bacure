@@ -7,7 +7,8 @@
             ChangeListError
             CreateObjectError
             ConfirmedPrivateTransferError
-            ErrorClassAndCode]))
+            ErrorClassAndCode
+            WritePropertyMultipleError]))
 
 
 
@@ -102,3 +103,17 @@
   [^ErrorClassAndCode o]
   {:error-class (bacnet->clojure (.getErrorClass o))
    :error-code (bacnet->clojure (.getErrorCode o))})
+
+
+
+(defmethod clojure->bacnet :write-property-multiple-error
+  [_ value]
+  (let [{:keys [error-class-and-code first-failed-write-attempt]} value]
+    (WritePropertyMultipleError.
+     (clojure->bacnet :error-class-and-code error-class-and-code)
+     (clojure->bacnet :object-property-reference first-failed-write-attempt))))
+
+(defmethod bacnet->clojure WritePropertyMultipleError
+  [^WritePropertyMultipleError o]
+  {:error-class-and-code (bacnet->clojure (.getErrorClassAndCode o))
+   :first-failed-write-attempt (bacnet->clojure (.getFirstFailedWriteAttempt o))})

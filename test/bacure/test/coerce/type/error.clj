@@ -26,3 +26,9 @@
   (let [e (example :error-class-and-code)]
     (is (= (bacnet->clojure (clojure->bacnet :error-class-and-code e))
            e))))
+
+
+(deftest write-property-multiple-error
+  (let [e (example :write-property-multiple-error)]
+    (is (= (bacnet->clojure (clojure->bacnet :write-property-multiple-error e))
+           e))))
