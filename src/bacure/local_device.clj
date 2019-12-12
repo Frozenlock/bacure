@@ -347,12 +347,29 @@
          (throw err#)
          @result#))))
 
+(defn -replace-object-identifier-by-device-id
+  "Replace any object-identifier key by a device-id.
+
+  If a device-id is already present, use it.
+  Otherwise fallback on the device-id provided inside the object-identifier.
+
+  Why? Bacure mostly use 'device-id' for simplicity. However this can
+  cause issues if an object-identifier is already present in a
+  configuration map."
+  [config]
+  (let [device-id (or (:device-id config)
+                      (second (:object-identifier config)))]
+    (-> config
+        (dissoc :object-identifier)
+        (assoc :device-id device-id))))
+
 (defn local-device-backup
   "Get the necessary information to create a local device backup."
   ([] (local-device-backup nil))
   ([local-device-id]
-   (merge (:init-configs (get-local-device local-device-id))
-          (get-configs local-device-id))))
+   (-> (:init-configs (get-local-device local-device-id))
+       (merge (get-configs local-device-id))
+       (-replace-object-identifier-by-device-id))))
 
 
 
@@ -395,7 +412,7 @@
   (terminate-all!)
   (state/clear-local-devices!))
 
-(defn save-local-device-backup!
+(defn  save-local-device-backup!
   "Save the device backup on a local file and return the config map."[]
   (save/save-configs (local-device-backup)))
 ;; eventually it would be nice to implement the BACnet backup procedure.
@@ -406,7 +423,10 @@
   configuration."
   ([local-device-id] (load-local-device-backup! local-device-id nil))
   ([local-device-id new-configs]
-   (reset-local-device! (merge (save/get-configs) new-configs))))
+   (-> (save/get-configs)
+       (merge new-configs)
+       (-replace-object-identifier-by-device-id)
+       (reset-local-device!))))
 
 (defn- set-communication-state!
   ([state] (set-communication-state! state nil 1))
