@@ -79,28 +79,30 @@
   "Read a single property. If there's a size-related APDU error, will
   try to read the BACnet arrays one item at the time."
   [local-device-id device-id object-identifier property-reference]
+  (let [read-info {:local-device-id    local-device-id
+                   :device-id          device-id
+                   :object-identifier  object-identifier
+                   :property-reference property-reference}]
+    (try
+      (let [read-result (read-single-property local-device-id device-id object-identifier property-reference)]
+        (cond
+          (:success read-result) read-result
 
-  (try
-    (let [read-result (read-single-property local-device-id device-id object-identifier property-reference)]
-      (cond
-        (:success read-result) read-result
+          ;;;;;
+          (or (:abort read-result)
+              (:reject read-result))
 
-        ;;;;;
-        (or (:abort read-result)
-            (:reject read-result))
-
-        (if (size-related? read-result)
-          (mapv (fn [result]
-                  (or (get result :success)
-                      (println (str "Read array error for " object-identifier " - " property-reference
-                                    "\n result : " result))))
-                (read-array-individually local-device-id device-id object-identifier property-reference))
-          (throw (or (some-> read-result :abort :apdu-error)
-                     (Exception. "APDU abort"))))
-        ;;;;;
-        (:timeout read-result) (throw (or (some-> read-result :timeout :timeout-error)
-                                          (Exception. "Timeout")))
-        :else read-result))))
+          (if (size-related? read-result)
+            (mapv (fn [result]
+                    (or (get result :success)
+                        (println (str "Read array error for " object-identifier " - " property-reference
+                                      "\n result : " result))))
+                  (read-array-individually local-device-id device-id object-identifier property-reference))
+            (throw (or (some-> read-result :abort :apdu-error)
+                       (Exception. "APDU abort"))))
+          ;;;;;
+          (:timeout read-result) (throw (ex-info (:timeout read-result) read-info))
+          :else read-result)))))
 
 (defn BACnet-array?
   "Return true if the raw data returned by a read property is part of
