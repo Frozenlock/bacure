@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.1.7] - 2019-12-12
+- Fix bug where `boot-up!` would create a device with a different device-id than the one provided.
+
 ## [1.1.6] - 2019-12-05
 - Add coercion for `write-property-multiple-error`.
   (A write request with this error would timeout instead of immediately return the error.)
