@@ -1,4 +1,6 @@
 # Changelog
+## Unreleased
+- Enforce distinct `object-property-references` in property reading functions. This should make reading from devices returning duplicates in their object-list (bug in their implementation?) more reliable.
 
 ## [1.1.7] - 2019-12-12
 - Fix bug where `boot-up!` would create a device with a different device-id than the one provided.

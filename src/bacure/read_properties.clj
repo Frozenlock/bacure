@@ -140,18 +140,19 @@
    {:object-name \"ANALOG INPUT 1\", :object-identifier [:analog-input 1]}
    {[:object-list 2] [:analog-input 0], :object-identifier [:device 1234]})"
   [local-device-id device-id object-property-references]
-  (->> (for [[oid prop-ref] object-property-references]
-         (let [read-result (read-single-property-with-fallback
-                            local-device-id device-id oid prop-ref)]
-           (into {} [[prop-ref (if-let [result (:success read-result)]
-                                 result ;; if success, just return the result
-                                 read-result)]
-                     [:object-identifier oid]])))
-       (group-by BACnet-array?)
-       ((fn [x] (concat (assemble-arrays (get x true)) (get x false))))
-       (group-by :object-identifier)
-       vals
-       (map (partial apply merge))))
+  (let [object-property-references (distinct object-property-references)]
+    (->> (for [[oid prop-ref] object-property-references]
+           (let [read-result (read-single-property-with-fallback
+                              local-device-id device-id oid prop-ref)]
+             (into {} [[prop-ref (if-let [result (:success read-result)]
+                                   result ;; if success, just return the result
+                                   read-result)]
+                       [:object-identifier oid]])))
+         (group-by BACnet-array?)
+         ((fn [x] (concat (assemble-arrays (get x true)) (get x false))))
+         (group-by :object-identifier)
+         vals
+         (map (partial apply merge)))))
 
 
 ;; ================================================================
@@ -316,7 +317,8 @@
   reading everything individually in order to be able to know which
   property-reference is problematic."
   [local-device-id device-id obj-prop-references]
-  (let [expanded-array? (is-expanded-array? obj-prop-references)
+  (let [obj-prop-references (distinct obj-prop-references)
+        expanded-array? (is-expanded-array? obj-prop-references)
         ;; some device propose segment windows that are far too small
         ;; for the expected payload, causing an error in BACnet4J.
         ;; "BACnetException Segment did not fit in segment window"
