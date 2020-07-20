@@ -1,4 +1,4 @@
-(defproject bacure "1.1.7"
+(defproject bacure "1.1.8-SNAPSHOT"
   :description "A Clojure wrapper for the bacnet4j library... and some nice additions."
   :url "https://hvac.io"
   :license {:name "GNU General Public License V3"
@@ -12,7 +12,7 @@
                   ;; to avoid version range (and repeatability issues), exclude a few dependencies
                   :exclusions [org.slf4j/slf4j-api lohbihler/sero-scheduler]]
                  ;; now require a precise version
-                 [org.slf4j/slf4j-api "1.7.28"]
+                 [org.slf4j/slf4j-api "1.7.30"]
                  [lohbihler/sero-scheduler "1.1.0"
                   :exclusions [org.slf4j/slf4j-api]]
 
@@ -24,7 +24,7 @@
           :output-path "codox"
           :source-uri "https://github.com/Frozenlock/bacure/blob/{version}/{filepath}#L{line}"}
   :profiles {:dev {:source-paths ["dev"]
-                   :dependencies [[org.slf4j/slf4j-log4j12 "1.7.28"]]
+                   :dependencies [[org.slf4j/slf4j-log4j12 "1.7.30"]]
                    :plugins [[lein-ancient "0.6.15"]]}}
 
   ;; Use a higher loglevel (up to 6) to debug clj-serial
