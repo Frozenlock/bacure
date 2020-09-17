@@ -1,5 +1,7 @@
 # Changelog
 ## Unreleased
+
+## [1.1.8] - 2020-09-17
 - Enforce distinct `object-property-references` in property reading functions. This should make reading from devices returning duplicates in their object-list (bug in their implementation?) more reliable.
 
 ## [1.1.7] - 2019-12-12
