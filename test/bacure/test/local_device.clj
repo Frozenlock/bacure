@@ -61,3 +61,7 @@
           (ld/remove-object! d-id o-id))
 
         (is (= 1 (count (ld/local-objects d-id))))))))
+
+(deftest nil-local-device-backup
+  (ld/with-temp-devices
+    (is (= nil (ld/local-device-backup)))))

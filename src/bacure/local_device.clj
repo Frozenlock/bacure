@@ -359,9 +359,11 @@
   [config]
   (let [device-id (or (:device-id config)
                       (second (:object-identifier config)))]
-    (-> config
-        (dissoc :object-identifier)
-        (assoc :device-id device-id))))
+    (if device-id
+      (-> config
+          (dissoc :object-identifier)
+          (assoc :device-id device-id))
+      config)))
 
 (defn local-device-backup
   "Get the necessary information to create a local device backup."
