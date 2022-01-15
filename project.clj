@@ -21,6 +21,7 @@
   :plugins [[lein-codox "0.10.7"]]
   :codox {;; see https://github.com/weavejester/codox/wiki/Deploying-to-GitHub-Pages
           :output-path "codox"
+          :namespaces [#"^bacure\."]
           :source-uri "https://github.com/Frozenlock/bacure/blob/{version}/{filepath}#L{line}"}
   :profiles {:dev {:source-paths ["dev"]
                    :dependencies [[org.slf4j/slf4j-log4j12 "1.7.33"]]
