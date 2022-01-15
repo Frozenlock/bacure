@@ -5,14 +5,13 @@
             :url "http://www.gnu.org/licenses/gpl-3.0.html"}
   :repositories {"ias-snapshots" "https://maven.mangoautomation.net/repository/ias-snapshot/"
                  "ias-releases" "https://maven.mangoautomation.net/repository/ias-release/"}
-  :dependencies [[org.clojure/clojure "1.10.1"]
+  :dependencies [[org.clojure/clojure "1.10.3"]
 
-                 ;; we use a fork of bacnet4j until https://github.com/infiniteautomation/BACnet4J/issues/23 is fixed
-                 [org.clojars.frozenlock/bacnet4j "5.0.0-1"
+                 [com.infiniteautomation/bacnet4j "6.0.0"
                   ;; to avoid version range (and repeatability issues), exclude a few dependencies
                   :exclusions [org.slf4j/slf4j-api lohbihler/sero-scheduler]]
                  ;; now require a precise version
-                 [org.slf4j/slf4j-api "1.7.30"]
+                 [org.slf4j/slf4j-api "1.7.33"]
                  [lohbihler/sero-scheduler "1.1.0"
                   :exclusions [org.slf4j/slf4j-api]]
 
@@ -24,7 +23,7 @@
           :output-path "codox"
           :source-uri "https://github.com/Frozenlock/bacure/blob/{version}/{filepath}#L{line}"}
   :profiles {:dev {:source-paths ["dev"]
-                   :dependencies [[org.slf4j/slf4j-log4j12 "1.7.30"]]
+                   :dependencies [[org.slf4j/slf4j-log4j12 "1.7.33"]]
                    :plugins [[lein-ancient "0.6.15"]]}}
 
   ;; Use a higher loglevel (up to 6) to debug clj-serial
