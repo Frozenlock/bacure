@@ -57,13 +57,13 @@ For MSTP, we will typically want to be a Master node, and this is the default. H
 
 ```clj
 
-(bc-core/boot-up! {:network-type :mstp
-                   :device-id    3333
-                   :object-name  "My awesome BACnet device"
-                   :com-port     "ttyS1"
-                   :baud-rate    9600
-                   :mstp-config {:local-node-id  6
-                                 :max-master-address 6}})
+(bacure.core/boot-up! {:network-type :mstp
+                       :device-id    3333
+                       :object-name  "My awesome BACnet device"
+                       :com-port     "ttyS1"
+                       :baud-rate    9600
+                       :mstp-config  {:local-node-id      6
+                                      :max-master-address 6}})
 
 ```
 
