@@ -181,12 +181,34 @@
 
 ;;;;;;
 
+(defn local-objects
+  "Return a list of all the local objects."
+  ([] (local-objects nil))
+  ([device-id]
+   (some->> (local-device-object device-id)
+            (.getLocalObjects)
+            (map c/bacnet->clojure))))
+
+(defn -next-instance
+  [objects object-type]
+  (->> (for [o objects
+             :let [[o-type o-inst] (:object-identifier o)]
+             :when (= o-type object-type)]
+         o-inst)
+       (cons -1)
+       (apply max)
+       (inc)))
+
 (defn add-object!
   "Add the object map to the local device. Returns an object map."
   ([object-map] (add-object! nil object-map))
   ([device-id object-map]
    (let [ldo (local-device-object device-id)
-         bacnet-object (c/clojure->bacnet :bacnet-object (c-obj/bacnet-object-with-local-device object-map ldo))]
+         new-oid (or (:object-identifier object-map)
+                     (let [o-type (:object-type object-map)]
+                       [o-type (-next-instance (local-objects device-id) o-type)]))
+         new-object-map (assoc object-map :object-identifier new-oid)
+         bacnet-object (c/clojure->bacnet :bacnet-object (c-obj/bacnet-object-with-local-device new-object-map ldo))]
      (.addObject ldo bacnet-object)
      (c/bacnet->clojure bacnet-object))))
 
@@ -195,14 +217,6 @@
   ([device-id object-identifier]
    (some-> (local-device-object device-id)
            (.removeObject (c/clojure->bacnet :object-identifier object-identifier)))))
-
-(defn local-objects
-  "Return a list of all the local objects."
-  ([] (local-objects nil))
-  ([device-id]
-   (some->> (local-device-object device-id)
-            (.getLocalObjects)
-            (map c/bacnet->clojure))))
 
 (defn object
   "Return a local object"

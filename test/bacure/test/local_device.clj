@@ -40,27 +40,39 @@
   (ld/with-temp-devices
     (let [d-id (ld/new-local-device!)
           object-ids (for [i (range 5)]
-                       [:analog-input i])]
+                       [:analog-output i])]
       (testing "Create objects"
-          ;; initially we should have the 'device' object.
+        ;; initially we should have the 'device' object.
         (is (= 1 (count (ld/local-objects d-id))))
 
-        ;; now add a bunch of analog inputs
+        ;; now add a bunch of analog outputs
         (doseq [object-id object-ids]
           (ld/add-object! d-id {:object-identifier object-id}))
 
         ;; we should now have 6 objects
         (is (= 6 (count (ld/local-objects d-id))))
 
-        ;; 5 of those should be analog inputs
-        (is (= 5 (count (filter #(= % :analog-input) (map :object-type (ld/local-objects d-id)))))))
+        ;; 5 of those should be analog outputs
+        (is (= 5 (count (filter #(= % :analog-output) (map :object-type (ld/local-objects d-id)))))))
 
       (testing "Delete objects"
         ;; finally try to remove them
         (doseq [o-id object-ids]
           (ld/remove-object! d-id o-id))
 
-        (is (= 1 (count (ld/local-objects d-id))))))))
+        (is (= 1 (count (ld/local-objects d-id)))))
+
+      (testing "Automatic instance increment"
+        ;; It should be possible to create new objects by providing only :object-type
+
+        (doseq [_ (range 5)]
+          (ld/add-object! d-id {:object-type :analog-output}))
+
+        (is (= (for [o (ld/local-objects d-id)
+                     :let [[o-type o-inst] (:object-identifier o)]
+                     :when (= o-type :analog-output)]
+                 o-inst)
+               [0 1 2 3 4]))))))
 
 (deftest nil-local-device-backup
   (ld/with-temp-devices
