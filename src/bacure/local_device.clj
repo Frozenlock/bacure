@@ -199,6 +199,24 @@
        (apply max)
        (inc)))
 
+(defn object
+  "Return a local object"
+  ([object-identifier] (object nil object-identifier))
+  ([device-id object-identifier]
+   (some-> (local-device-object device-id)
+           (.getObject (c/clojure->bacnet :object-identifier object-identifier)))))
+
+(defn update-object!
+  ([object-map] (update-object! nil object-map))
+  ([device-id object-map]
+   (let [oid (:object-identifier object-map)
+         bacnet-object (object device-id oid)]
+     (doseq [[p-id v] object-map]
+       (.writePropertyInternal bacnet-object
+                               (c/clojure->bacnet :property-identifier p-id)
+                               (c-obj/encode-property-value (first oid) p-id v)))
+     (c/bacnet->clojure bacnet-object))))
+
 (defn add-object!
   "Add the object map to the local device. Returns an object map."
   ([object-map] (add-object! nil object-map))
@@ -210,20 +228,14 @@
          new-object-map (assoc object-map :object-identifier new-oid)
          bacnet-object (c/clojure->bacnet :bacnet-object (c-obj/bacnet-object-with-local-device new-object-map ldo))]
      (.addObject ldo bacnet-object)
-     (c/bacnet->clojure bacnet-object))))
+     ;; Update additional properties (name, description, etc.)
+     (update-object! device-id new-object-map))))
 
 (defn remove-object!
   ([object-identifier] (remove-object! nil object-identifier))
   ([device-id object-identifier]
    (some-> (local-device-object device-id)
            (.removeObject (c/clojure->bacnet :object-identifier object-identifier)))))
-
-(defn object
-  "Return a local object"
-  ([object-identifier] (object nil object-identifier))
-  ([device-id object-identifier]
-   (some-> (local-device-object device-id)
-           (.getObject (c/clojure->bacnet :object-identifier object-identifier)))))
 
 
 

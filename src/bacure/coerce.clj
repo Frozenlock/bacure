@@ -64,7 +64,7 @@
 
 ;;;;;;;;;;;;;;
 
-(defn example 
+(defn example
   "Generate an example of the expected
   datastructure."
   [object-type-keyword]

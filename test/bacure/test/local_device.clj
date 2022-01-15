@@ -72,7 +72,16 @@
                      :let [[o-type o-inst] (:object-identifier o)]
                      :when (= o-type :analog-output)]
                  o-inst)
-               [0 1 2 3 4]))))))
+               [0 1 2 3 4])))
+
+      (testing "Create object with properties"
+        (let [obj-props {:object-type :analog-value
+                         :object-name "analog object"
+                         :description "Description"
+                         :units       :bars}
+              new-object (ld/add-object! d-id obj-props)]
+          (is (= new-object
+                 (assoc obj-props :object-identifier [:analog-value 0]))))))))
 
 (deftest nil-local-device-backup
   (ld/with-temp-devices
