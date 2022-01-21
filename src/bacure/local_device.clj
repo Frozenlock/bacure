@@ -373,7 +373,10 @@
      (let [result# (atom nil)
            error# (atom nil)]
        (with-redefs [state/local-devices (atom {})]
-         (try (reset! result# (do ~@body))
+         (try (let [ret# (do ~@body)]
+                (reset! result# (if (seq? ret#) ; Prevent result from being lazy
+                                  (doall ret#)
+                                  ret#)))
               (catch Exception e#
                 (reset! error# e#))
               (finally (terminate-all!))))
