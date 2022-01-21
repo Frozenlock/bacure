@@ -234,8 +234,18 @@
 (defn remove-object!
   ([object-identifier] (remove-object! nil object-identifier))
   ([device-id object-identifier]
+   (let [object-type (first object-identifier)]
+     (assert (not= object-type :device) "Can't remove the device object."))
    (some-> (local-device-object device-id)
            (.removeObject (c/clojure->bacnet :object-identifier object-identifier)))))
+
+(defn remove-all-objects!
+  "Remove all the objects (except the local device itself)."
+  ([] (remove-all-objects! nil))
+  ([device-id]
+   (doseq [{:keys [object-identifier]} (local-objects device-id)
+           :when (not= (first object-identifier) :device)]
+     (remove-object! device-id object-identifier))))
 
 
 
