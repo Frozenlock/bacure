@@ -407,7 +407,10 @@
   ([local-device-id]
    (-> (:init-configs (get-local-device local-device-id))
        (merge (get-configs local-device-id))
-       (-replace-object-identifier-by-device-id))))
+       (-replace-object-identifier-by-device-id)
+       ;; Also save the local objects except the :device.
+       (assoc :local-objects (->> (local-objects local-device-id)
+                                  (remove #(= (:object-type %) :device)))))))
 
 
 
@@ -432,10 +435,13 @@
          (initialize! local-device-id))
      ;; when we already have a local device, backup its configs, merge
      ;; them with the newly provided one and restart the device.
-     (let [backup (local-device-backup local-device-id)]
+     (let [backup (local-device-backup local-device-id)
+           config (merge backup new-config)]
        (terminate! local-device-id)
        (new-local-device! (merge backup new-config))
-       (initialize! local-device-id)))))
+       (initialize! local-device-id)
+       (doseq [obj (:local-objects config)]
+         (add-object! local-device-id obj))))))
 
 (defn clear!
   "Destroy all traces of one local-device."

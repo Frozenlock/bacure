@@ -64,7 +64,7 @@
 
       (testing "Automatic instance increment"
         ;; It should be possible to create new objects by providing only :object-type
-
+        (ld/remove-all-objects! d-id)
         (doseq [_ (range 5)]
           (ld/add-object! d-id {:object-type :analog-output}))
 
@@ -75,13 +75,21 @@
                [0 1 2 3 4])))
 
       (testing "Create object with properties"
+        (ld/remove-all-objects! d-id)
         (let [obj-props {:object-type :analog-value
                          :object-name "analog object"
                          :description "Description"
                          :units       :bars}
               new-object (ld/add-object! d-id obj-props)]
           (is (= new-object
-                 (assoc obj-props :object-identifier [:analog-value 0]))))))))
+                 (assoc obj-props :object-identifier [:analog-value 0])))))
+
+      (testing "Objects can remain after device restart"
+        (ld/remove-all-objects! d-id)
+        (doseq [_ (range 3)]
+          (ld/add-object! d-id {:object-type :analog-value}))
+        (ld/reset-local-device!)
+        (is (= 4 (count (ld/local-objects))))))))
 
 (deftest nil-local-device-backup
   (ld/with-temp-devices
