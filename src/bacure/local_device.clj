@@ -386,7 +386,7 @@
          (throw err#)
          @result#))))
 
-(defn -replace-object-identifier-by-device-id
+(defn- replace-object-identifier-by-device-id
   "Replace any object-identifier key by a device-id.
 
   If a device-id is already present, use it.
@@ -408,12 +408,12 @@
   "Get the necessary information to create a local device backup."
   ([] (local-device-backup nil))
   ([local-device-id]
-   (-> (:init-configs (get-local-device local-device-id))
-       (merge (get-configs local-device-id))
-       (-replace-object-identifier-by-device-id)
-       ;; Also save the local objects except the :device.
-       (assoc :local-objects (->> (local-objects local-device-id)
-                                  (remove #(= (:object-type %) :device)))))))
+   (some-> (:init-configs (get-local-device local-device-id))
+           (merge (get-configs local-device-id))
+           (replace-object-identifier-by-device-id)
+           ;; Also save the local objects except the :device.
+           (assoc :local-objects (->> (local-objects local-device-id)
+                                      (remove #(= (:object-type %) :device)))))))
 
 
 
@@ -472,7 +472,7 @@
   ([local-device-id new-configs]
    (-> (save/get-configs)
        (merge new-configs)
-       (-replace-object-identifier-by-device-id)
+       (replace-object-identifier-by-device-id)
        (reset-local-device!))))
 
 (defn- set-communication-state!
