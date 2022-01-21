@@ -52,15 +52,19 @@
   ([configs]
    (let [{:keys [delay port-min port-max] :or
           {delay 500 port-min 47801 port-max 47820}} configs]
-     (ld/with-temp-devices
-       (->> (for [port (range port-min port-max)]
-                    (future (ld/reset-local-device! port (merge configs {:port port}))
-                            (rd/find-remote-devices port {})
-                            (Thread/sleep delay)
-                            (when-let [devices (seq (rd/remote-devices port))]
-                              {:port port :devices devices})))
-            (map deref)
-            (remove nil?))))))
+     (let [device-id (:device-id configs)
+           configs (-> (ld/local-device-backup device-id)
+                       (merge configs)
+                       (dissoc :device-id))] ; Can't use the same ID multiple times
+       (ld/with-temp-devices
+         (->> (for [port (range port-min port-max)]
+                (future (ld/reset-local-device! port (merge configs {:port port}))
+                        (rd/find-remote-devices port {})
+                        (Thread/sleep delay)
+                        (when-let [devices (seq (rd/remote-devices port))]
+                          {:port port :devices devices})))
+              (map deref)
+              (remove nil?)))))))
 
 
 ;; ================================================================
