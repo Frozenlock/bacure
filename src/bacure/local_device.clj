@@ -392,7 +392,7 @@
   If a device-id is already present, use it.
   Otherwise fallback on the device-id provided inside the object-identifier.
 
-  Why? Bacure mostly use 'device-id' for simplicity. However this can
+  Why? Bacure mostly uses 'device-id' for simplicity. However this can
   cause issues if an object-identifier is already present in a
   configuration map."
   [config]
