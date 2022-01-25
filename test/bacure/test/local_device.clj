@@ -89,7 +89,13 @@
         (doseq [_ (range 3)]
           (ld/add-object! d-id {:object-type :analog-value}))
         (ld/reset-local-device!)
-        (is (= 4 (count (ld/local-objects))))))))
+        (is (= 4 (count (ld/local-objects)))))
+
+      (testing "Create objects automatically from configs"
+        (ld/clear-all!)
+        (ld/reset-local-device! {:device-id d-id
+                                 :local-objects [{:object-type :analog-value}]})
+        (is (= 2 (count (ld/local-objects d-id))))))))
 
 (deftest nil-local-device-backup
   (ld/with-temp-devices

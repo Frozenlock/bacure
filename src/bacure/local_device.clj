@@ -435,7 +435,9 @@
    (if-not (get-local-device local-device-id)
      ;; if we don't have a local device available, create one.
      (do (new-local-device! (merge {:device-id local-device-id} new-config))
-         (initialize! local-device-id))
+         (initialize! local-device-id)
+         (doseq [obj (:local-objects new-config)]
+           (add-object! local-device-id obj)))
      ;; when we already have a local device, backup its configs, merge
      ;; them with the newly provided one and restart the device.
      (let [backup (local-device-backup local-device-id)
