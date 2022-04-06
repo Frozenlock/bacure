@@ -178,7 +178,7 @@
   Also define a <class-name>-map which is a map of keywords and
   integer values."
   [bacnet-class]
-  `(let [subclass-map# (c/subclass-to-map ~bacnet-class)
+  `(let [subclass-map# (subclass-to-map ~bacnet-class)
          inverted-subclass-map# (cset/map-invert subclass-map#)
          conversion-key# (-> (re-find #"[A-Za-z0-9]*$" (str (quote ~bacnet-class)))
                              (from-camel)
