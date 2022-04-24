@@ -1,5 +1,6 @@
 (ns bacure.serial-connection
   (:require [serial.core :as serial]
+            [clojure.tools.logging :as log]
             [bacure.state :as state])
   (:import (java.io OutputStream
                     InputStream)))
@@ -39,7 +40,7 @@
   [com-port]
 
   (when (connection-opened? com-port)
-    (println "Closing serial connection to " com-port)
+    (log/info (str "Closing serial connection to " com-port))
 
     (let [closed-connection (some-> (get-connection com-port)
                                     serial/close!)]

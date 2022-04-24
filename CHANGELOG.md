@@ -3,7 +3,9 @@
 
 - Allow additional properties when creating objects;
 - Ability to create objects by only providing `:object-type`;
-- Update dependencies, including BACnet4J 6.0.0.
+- Fix bug in `find-bacnet-port` where temporary devices would stay around;
+- Update dependencies, including BACnet4J 6.0.0;
+- Use logging instead of simply printing statements.
 
 ## [1.1.9] - 2021-01-22
 - Fix bug where a nil `:device-id` could be returned by `local-device-backup`.

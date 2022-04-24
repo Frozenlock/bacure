@@ -3,10 +3,10 @@
   (:require [bacure.coerce :as c]
             [bacure.coerce.obj :as co]
             [bacure.coerce.service.acknowledgement]
-            [bacure.local-device :as ld]
-            [bacure.state :as state]
             [bacure.events :as events]
-            [bacure.services :as services]))
+            [bacure.services :as services]
+            [bacure.state :as state]
+            [clojure.tools.logging :as log]))
 
 (import (com.serotonin.bacnet4j service.confirmed.ReadPropertyRequest
                                 service.confirmed.ReadPropertyMultipleRequest
@@ -18,6 +18,8 @@
                                 exception.AbortAPDUException
                                 exception.ErrorAPDUException
                                 exception.ServiceTooBigException))
+
+(comment :bacure.coerce.service.acknowledgement/side-effect)
 
 ;; ================================================================
 ;; =====================  Normal read request =====================
@@ -54,7 +56,7 @@
                                            [property-reference 0])]
      (if-let [size (:success read-result)]
        (expand-array local-device-id device-id object-identifier property-reference size)
-       (do (println (str "Couldn't retrieve array length : " read-result))
+       (do (log/error (str "Couldn't retrieve array length : " read-result))
            nil))))
   ([local-device-id device-id object-identifier property-reference size]
    (into []
@@ -95,8 +97,8 @@
           (if (size-related? read-result)
             (mapv (fn [result]
                     (or (get result :success)
-                        (println (str "Read array error for " object-identifier " - " property-reference
-                                      "\n result : " result))))
+                        (log/error (str "Read array error for " object-identifier " - " property-reference
+                                        "\n result : " result))))
                   (read-array-individually local-device-id device-id object-identifier property-reference))
             (throw (or (some-> read-result :abort :apdu-error)
                        (Exception. "APDU abort"))))
@@ -349,9 +351,9 @@
            (= (count obj-prop-references) 1) ;; single property
            (not expanded-array?)) ;; not an array index
 
-          (do (println "Error for : " (first obj-prop-references)
-                       (size-related? read-result))
-              (println "Trying to read as an array (in chunks).")
+          (do (log/warn (str "Error for : " (first obj-prop-references)
+                             (size-related? read-result)))
+              (log/warn "Trying to read as an array (in chunks).")
               (state/set-request-response! read-result)
               (let [expanded-array (apply (partial expand-array local-device-id device-id)
                                           (first obj-prop-references))]
@@ -384,8 +386,8 @@
                      (Exception. "Timeout")))
 
 
-          :else (do (println "Read-property-multiple error.")
-                    (println obj-prop-references)
+          :else (do (log/error "Read-property-multiple error.")
+                    (log/error obj-prop-references)
                     read-result))))))
 
 

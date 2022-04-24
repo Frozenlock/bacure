@@ -1,6 +1,7 @@
 (ns bacure.test.local-device
-  (:require [clojure.test :refer :all]
-            [bacure.local-device :as ld]))
+  (:require [bacure.local-device :as ld]
+            [clojure.test :refer :all]
+            [taoensso.timbre :as timbre]))
 
 (deftest reuse-address
   (testing "Multiple BACnet on the same interface"
@@ -25,13 +26,11 @@
         (ld/new-local-device! {:device-id id1 :reuse-address false})
         (ld/new-local-device! {:device-id id2 :reuse-address false})
 
-        (with-out-str ;; Don't print out the error message. Perhaps we
-                      ;; should update local-device to stop printing
-                      ;; an error message like this?
-          (try
-            (ld/initialize! id1)
-            (ld/initialize! id2)
-            (catch java.net.BindException e)))
+        (timbre/with-level :fatal
+          ;; Don't print out the error message.
+          (is (thrown? java.net.BindException
+                       (ld/initialize! id1)
+                       (ld/initialize! id2))))
 
         (is (not (and (.isInitialized (ld/local-device-object id1))
                       (.isInitialized (ld/local-device-object id2)))))))))

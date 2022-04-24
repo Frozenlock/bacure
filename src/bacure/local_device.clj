@@ -1,20 +1,26 @@
 (ns bacure.local-device
-  (:require [bacure.network :as net]
-            [bacure.coerce :as c]
+  (:require [bacure.coerce :as c]
             [bacure.coerce.obj :as c-obj]
-            [bacure.coerce.type.primitive]
-            [bacure.coerce.type.enumerated]
             [bacure.coerce.type.constructed]
+            [bacure.coerce.type.enumerated]
             [bacure.coerce.type.error]
+            [bacure.coerce.type.primitive]
+            [bacure.events :as events]
             [bacure.local-save :as save]
+            [bacure.network :as net]
             [bacure.serial-connection :as serial]
             [bacure.state :as state]
-            [bacure.events :as events])
-  (:import (com.serotonin.bacnet4j LocalDevice
-                                   obj.BACnetObject
-                                   npdu.ip.IpNetwork
-                                   transport.DefaultTransport)
-           (java.net InetSocketAddress)))
+            [clojure.tools.logging :as log])
+  (:import [com.serotonin.bacnet4j LocalDevice]
+           [com.serotonin.bacnet4j.npdu.ip IpNetwork]
+           [com.serotonin.bacnet4j.transport DefaultTransport]
+           [java.net InetSocketAddress]))
+
+(comment
+  :bacure.coerce.type.constructed/side-effect
+  :bacure.coerce.type.enumerated/side-effect
+  :bacure.coerce.type.error/side-effect
+  :bacure.coerce.type.primitive/side-effect)
 
 ;; we store all the local devices with their device-id as the key.
 
@@ -321,17 +327,17 @@
    (let [ldo (local-device-object local-device-id)]
      ;; try to bind to the bacnet port
      (if (.isInitialized ldo)
-       (println "The local device is already initialized.")
+       (log/info "The local device is already initialized.")
        (let [port (or (:port (get-configs local-device-id)) 47808)
              port-bind (try (do (.initialize ldo) true)
                             (catch java.net.BindException e
-                              (do (println (str "\n*Error*: The BACnet port ("port") is already bound to another "
-                                                "software.\n\t Please close the other software and try again.\n"))
+                              (do (log/error (str "The BACnet port ("port") is already bound to another "
+                                                  "software.\n\t Please close the other software and try again.\n"))
                                   (throw e))))]
          ;; once we have the port, load the local programs
          (try (save/load-program)  ;; Anything in the program will be executed.
-              (catch Exception e (println (str "Uh oh... couldn't load the local device program:\n"
-                                               (.getMessage e)))))
+              (catch Exception e (log/error (str "Uh oh... couldn't load the local device program:\n"
+                                                 (.getMessage e)))))
          ;; return true if we are bound to the port
          port-bind)))))
 

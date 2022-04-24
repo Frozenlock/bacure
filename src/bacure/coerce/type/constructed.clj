@@ -1,16 +1,17 @@
 (ns bacure.coerce.type.constructed
   (:require [bacure.coerce :as c :refer [bacnet->clojure clojure->bacnet]]
-            [bacure.coerce.type.primitive :as p]
-            [bacure.coerce.type.enumerated :as e]
             [bacure.coerce.obj :as obj]
-            [clojure.string :as str]
+            [bacure.coerce.type.enumerated :as e]
+            [bacure.coerce.type.primitive :as p]
             [clj-time.core :as t]
             [clj-time.format :as tf]
-            [clj-time.local :as tl])
+            [clj-time.local :as tl]
+            [clojure.string :as str]
+            [clojure.tools.logging :as log])
   (:import [com.serotonin.bacnet4j.type.constructed
             AccessRule
-            AccessRule$TimeRangeSpecifier
             AccessRule$LocationSpecifier
+            AccessRule$TimeRangeSpecifier
             AccumulatorRecord
             AccumulatorRecord$AccumulatorStatus
             ActionCommand
@@ -19,19 +20,16 @@
             Choice
             DailySchedule
             DateTime
-            DeviceObjectReference
             DeviceObjectPropertyReference
+            DeviceObjectReference
             EventTransitionBits
-
             LimitEnable
             LogRecord
-
             ObjectPropertyReference
             ObjectTypesSupported
             PriorityValue
             PropertyReference
             PropertyValue
-
             ReadAccessResult
             ReadAccessResult$Result
             ReadAccessSpecification
@@ -44,8 +42,7 @@
             TimeStamp
             TimeValue
             WriteAccessSpecification]
-           [java.util ArrayList List]))
-
+           [java.util ArrayList]))
 
 (c/enumerated-converter AccessRule$TimeRangeSpecifier)
 (c/enumerated-converter AccessRule$LocationSpecifier)
@@ -550,7 +547,7 @@
                       bacnet->clojure)]
     (try {prop-ref
           (bacnet->clojure (.getReadResult o))}
-         (catch Exception e (do (println (str "Error : " (.getMessage e) " --- " prop-ref ))
+         (catch Exception e (do (log/error (str (.getMessage e) " --- " prop-ref ))
                                 {prop-ref {:error {:error-message (.getMessage e)}}})))))
 
 ;;;

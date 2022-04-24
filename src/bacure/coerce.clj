@@ -1,14 +1,15 @@
 (ns bacure.coerce
-  (:require [clojure.string :as str]
+  (:require [clojure.edn :as edn]
             [clojure.set :as cset]
-            [clojure.edn :as edn])
-  (:import [java.util ArrayList List]))
+            [clojure.string :as str]
+            [clojure.tools.logging :as log])
+  (:import [java.util ArrayList]))
 
 (defmulti bacnet->clojure
   "Recursively convert objects from the bacnet4j library into clojure datastructure." class)
 
 (defmethod bacnet->clojure :default [x]
-  (println "No method YET to coerce " (.toString x)" into a clojure structure."))
+  (log/warn (str "No method YET to coerce " (.toString x)" into a clojure structure.")))
 
 
 ;; methods for clojure stuff

@@ -1,16 +1,17 @@
 (ns bacure.services
   (:require [bacure.coerce :as c]
+            [bacure.coerce.service.confirmed]
+            [bacure.events :as events]
             [bacure.local-device :as ld]
             [bacure.state :as state]
-            [bacure.events :as events]
-            [bacure.coerce.service.confirmed]
-            [bacure.coerce.service.acknowledgement])
-  (:import (com.serotonin.bacnet4j ResponseConsumer)
-           (com.serotonin.bacnet4j.service.unconfirmed WhoIsRequest
-                                                       WhoHasRequest
-                                                       WhoHasRequest$Limits)
-           (com.serotonin.bacnet4j.exception ServiceTooBigException)
-           (com.serotonin.bacnet4j.service.confirmed SubscribeCOVRequest)))
+            [clojure.tools.logging :as log])
+  (:import [com.serotonin.bacnet4j ResponseConsumer]
+           [com.serotonin.bacnet4j.exception ServiceTooBigException]
+           [com.serotonin.bacnet4j.service.confirmed SubscribeCOVRequest]
+           [com.serotonin.bacnet4j.service.unconfirmed WhoHasRequest WhoHasRequest$Limits WhoIsRequest]))
+
+(comment :bacure.coerce.service.confirmed/side-effect)
+(comment :bacure.coerce.service.confirmed/side-effect)
 
 ;;; bacnet4j introduced some kind of callbacks with the
 ;;; request-sending mechanism. For simplicity sake, we use promises to
@@ -85,7 +86,7 @@
      (future (do (Thread/sleep (+ timeout 1000))
                  (deliver return-promise {:timeout (str "The device "device-id " didn't respond in time.")})))
      (try @return-promise
-          (catch Exception e (println "ERROR : " (.getMessage e)))))))
+          (catch Exception e (log/error (.getMessage e)))))))
 
 (defn send-who-is
   [local-device-id {:keys [min-range max-range]

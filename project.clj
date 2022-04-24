@@ -15,6 +15,9 @@
                  [lohbihler/sero-scheduler "1.1.0"
                   :exclusions [org.slf4j/slf4j-api]]
 
+                 ;; logging
+                 [org.clojure/tools.logging "1.2.4"]
+
                  [clj-serial "2.0.5"]
                  [clj-time "0.15.2"]]
   :repl-options {:init-ns user}
@@ -24,7 +27,9 @@
           :namespaces [#"^bacure\."]
           :source-uri "https://github.com/Frozenlock/bacure/blob/{version}/{filepath}#L{line}"}
   :profiles {:dev {:source-paths ["dev"]
-                   :dependencies [[org.slf4j/slf4j-log4j12 "1.7.33"]]
+                   :dependencies [;; error logs
+                                  [com.taoensso/timbre "5.1.0"]
+                                  [com.fzakaria/slf4j-timbre "0.3.20"]]
                    :plugins [[lein-ancient "0.6.15"]]}}
 
   ;; Use a higher loglevel (up to 6) to debug clj-serial
