@@ -115,14 +115,14 @@
          [[:analog-input 0] [:present-value 2]])))
 
 
-(deftest test-device-object-property-reference
+(deftest test-edvice-object-property-reference
   (is (example :device-object-property-reference))
-  (is (= (-> (clojure->bacnet :device-object-property-reference [[:analog-input 0] [[:analog-output 12] :present-value]])
+  (is (= (-> (clojure->bacnet :device-object-property-reference [[:device 1234] [[:analog-output 12] :present-value]])
              (bacnet->clojure))
-         [[:analog-input 0] [[:analog-output 12] :present-value]]))
-  (is (= (-> (clojure->bacnet :device-object-property-reference [[:analog-input 0] [[:analog-output 12] [:present-value 2]]])
+         [[:device 1234] [[:analog-output 12] :present-value]]))
+  (is (= (-> (clojure->bacnet :device-object-property-reference [[:device 1234] [[:analog-output 12] [:present-value 2]]])
              (bacnet->clojure))
-         [[:analog-input 0] [[:analog-output 12] [:present-value 2]]])))
+         [[:device 1234] [[:analog-output 12] [:present-value 2]]])))
 
 
 (deftest test-device-object-reference

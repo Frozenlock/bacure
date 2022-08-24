@@ -477,7 +477,7 @@
 (defmethod clojure->bacnet :device-object-property-reference
   [_ value]
   (if (nil? value)
-    (c-device-object-property-reference [value value])
+    (c-device-object-property-reference [[:device 0] value])
     (c-device-object-property-reference value)))
 
 (defmethod bacnet->clojure DeviceObjectPropertyReference

@@ -1,6 +1,7 @@
 # Changelog
 ## Unreleased
 
+- Fix `test-device-object-property-reference` test: use device object
 - Allow additional properties when creating objects;
 - Ability to create objects by only providing `:object-type`;
 - Fix bug in `find-bacnet-port` where temporary devices would stay around;
