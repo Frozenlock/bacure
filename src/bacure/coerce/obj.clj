@@ -101,8 +101,9 @@
         naked-value (if forced-type (:value value) value)
         length (:array-length value-type)
         pad (fn [coll]
-              (when (> length 0)
-                (take length (concat coll (repeat nil)))))]
+              (if (> length 0)
+                (take length (concat coll (repeat nil)))
+                coll))]
     (if-not type-keyword
       (throw
        (Exception.
