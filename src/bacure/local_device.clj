@@ -356,9 +356,9 @@
   connection in its MS/TP node thread and it'll throw angrily.)"
   ([] (terminate! nil))
   ([local-device-id]
-   (try
-     (.terminate (local-device-object local-device-id))
-     (catch Exception e)) ;if the device isn't initialized, it will throw an error
+   (let [ldo (local-device-object local-device-id)]
+     (when (.isInitialized ldo)
+       (.terminate ldo)))
    (close-serial-connection-for-device! local-device-id)))
 
 (defn terminate-all!
