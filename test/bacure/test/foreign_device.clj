@@ -4,9 +4,12 @@
             [bacure.remote-device :as rd]))
 
 (defn generate-local-devices!
-  "Generate multiple devices with a unique IP address (they don't bind
-  to the anylocal \"0.0.0.0\" and thus won't automatically receive
-  broadcasts.)."
+  "Generate multiple devices with a unique IP address.
+
+  They don't bind to anylocal (\"0.0.0.0\") and thus won't
+  automatically receive broadcasts.
+
+  You probably want to register them as foreign devices."
   [qty]
   (let [ids-and-addr (for [i (range 1 (inc qty))]
                        {:id i :ip-address (str "127.0.0."i)})]
@@ -39,4 +42,3 @@
       (is (-> (rd/remote-devices 2)
               (count)
               (= 1))))))
-

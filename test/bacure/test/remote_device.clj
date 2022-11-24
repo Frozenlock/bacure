@@ -8,24 +8,24 @@
             [bacure.network :as net]))
 
 (defn init-local-test-devices!
-  "Boot up 2 local devices with ID 1 and 2. The devices register as
-  foreign devices to each other." []
-  ;; generate local devices 1 and 2
-  (fd/generate-local-devices! 2)
-  ;; make device 2 aware of device 1
-  (ld/register-as-foreign-device 1 "127.0.0.2" 47808 60)
-  (ld/register-as-foreign-device 2 "127.0.0.1" 47808 60)
-  (ld/i-am-broadcast! 1)
-  (ld/i-am-broadcast! 2)
-  (Thread/sleep 50))
+  "Boot up local devices and return their IDs.
+  The devices are registered as foreign devices to each other."
+  [qty]
+  (let [id->ip (into {} (map (juxt :id :ip-address) (fd/generate-local-devices! qty)))]
+    ;; Make devices aware of each other
+    (doseq [[ld-id _] id->ip] ; current local device
+      (doseq [[_ rd-ip] (dissoc id->ip ld-id)] ; all the other devices
+        (ld/register-as-foreign-device ld-id rd-ip 47808 60)))
+    (doseq [id (keys id->ip)]
+      (ld/i-am-broadcast! id))
+    (Thread/sleep 50)
+    (keys id->ip)))
 
 
 
 (deftest basic-read-properties
   (ld/with-temp-devices
-    (init-local-test-devices!)
-    (let [ld-id 1
-          rd-id 2]
+    (let [[ld-id rd-id] (init-local-test-devices! 2)]
       (testing "Partition array"
         (with-redefs [services/send-request-promise (constantly {:success 10})]
           (let [expected-result (into [] (for [i (range 1 11)]
@@ -35,9 +35,7 @@
 
 (deftest extended-information
   (ld/with-temp-devices
-    (init-local-test-devices!)
-    (let [ld-id 1
-          rd-id 2]
+    (let [[ld-id rd-id] (init-local-test-devices! 2)]
       ;; initially we shouldn't have this data
       (is (= nil (rd/cached-extended-information ld-id rd-id)))
       ;; now try to retrieve it
@@ -48,9 +46,7 @@
 (deftest read-properties
   (ld/with-temp-devices
     ;; first we create the local devices
-    (init-local-test-devices!)
-    (let [ld-id 1
-          rd-id 2]
+    (let [[ld-id rd-id] (init-local-test-devices! 2)]
       (is (some #{rd-id} (rd/remote-devices ld-id))
           (str "This test requires a device with ID "rd-id " on the network."))
       
