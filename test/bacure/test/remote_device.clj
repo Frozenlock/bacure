@@ -99,7 +99,7 @@
         ;; (is (:success (rd/create-remote-object! ld-id rd-id {:object-identifier [:analog-input 1]
         ;;                                                      :object-name "Test analog"
         ;;                                                      :description "This is a test"})))
-      
+        
         ;; ;; set the remote property
         ;; (rd/set-remote-property! ld-id rd-id [:analog-input 1] :present-value 10)
 
@@ -109,37 +109,36 @@
         ;;            (get :present-value))
         ;;        10.0))
         ;; (rd/delete-remote-object! ld-id rd-id [:analog-input 1])        
-      
+        
         ;; (is (= (-> (rp/read-properties ld-id rd-id [[[:analog-input 1] :present-value]])
         ;;            (first)
         ;;            :present-value)
         ;;        {:error {:error-class :object :error-code :unknown-object}}))
         )
 
-      ;; (testing "Splitting max read multiple references"
-      ;;   ;; create a bunch of objects
-      ;;   (doseq [i (range 10)]          
-      ;;     (rd/create-remote-object! ld-id rd-id {:object-identifier [:analog-input i]
-      ;;                                            :object-name (str "Analog "i)
-      ;;                                            :description "This is a test"}))
+      (testing "Splitting max read multiple references"
+        ;; create a bunch of objects
+        (doseq [i (range 10)]
+          (ld/add-object! rd-id {:object-identifier [:analog-input i]
+                                 :object-name       (str "Analog "i)
+                                 :description       "This is a test"}))
 
-      ;;   (let [mrmr (.getMaxReadMultipleReferences (rd/rd ld-id rd-id))]
-      ;;     (.setMaxReadMultipleReferences (rd/rd ld-id rd-id) 2) ;; <--
-      ;;     ;; maximum 2 references this will force us to read the
-      ;;     ;; properties by sending multiple requests. They should all
-      ;;     ;; be merged once they come back.
-      ;;     (let [results (rp/read-properties ld-id rd-id [[[:analog-input 0] :object-name]
-      ;;                                                    [[:analog-input 1] :object-name]
-      ;;                                                    [[:analog-input 3] :object-name]
-      ;;                                                    [[:analog-input 4] :object-name]
-      ;;                                                    [[:analog-input 15] :object-name]] ;; <-- will return an error
-      ;;                                       )]
-      ;;                                   ;(prn results)
-      ;;       (is (= 5 (count results)))
-      ;;       (is (:error-code (:object-name (last results)))))
-      ;;     (.setMaxReadMultipleReferences (rd/rd ld-id rd-id) mrmr))
+        (let [mrmr (.getMaxReadMultipleReferences (rd/rd ld-id rd-id))]
+          (.setMaxReadMultipleReferences (rd/rd ld-id rd-id) 2) ;; <--
+          ;; maximum 2 references this will force us to read the
+          ;; properties by sending multiple requests. They should all
+          ;; be merged once they come back.
+          (let [results (rp/read-properties ld-id rd-id [[[:analog-input 0] :object-name]
+                                                         [[:analog-input 1] :object-name]
+                                                         [[:analog-input 3] :object-name]
+                                                         [[:analog-input 4] :object-name]
+                                                         [[:analog-input 15] :object-name]] ;; <-- will return an error
+                                            )]
+            (is (= 5 (count results)))
+            (is (:error-code (:object-name (last results)))))
+          (.setMaxReadMultipleReferences (rd/rd ld-id rd-id) mrmr))
 
-      ;;   ;; delete all objects
-      ;;   (doseq [i (range 10)]
-      ;;     (rd/delete-remote-object! ld-id rd-id [:analog-input i])))
-      )))
+        ;;   ;; delete all objects
+        ;;   (doseq [i (range 10)]
+        ;;     (rd/delete-remote-object! ld-id rd-id [:analog-input i])))
+        ))))
