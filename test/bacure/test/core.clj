@@ -1,7 +1,7 @@
 (ns bacure.test.core
-  (:use clojure.test)
   (:require [bacure.core :as b]
-            [bacure.local-device :as ld]))
+            [bacure.local-device :as ld]
+            [clojure.test :refer :all]))
 
 (deftest device-lifecycle
   (testing "Boot and terminate a local BACnet device"

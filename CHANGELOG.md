@@ -1,6 +1,7 @@
 # Changelog
 ## Unreleased
 
+- Fix `read-range-request` to allow having a nil array index;
 - Check if device is initialized before terminating it;
 - Fix `test-device-object-property-reference` test: use device object;
 - Allow additional properties when creating objects;

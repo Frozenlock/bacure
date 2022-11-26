@@ -464,13 +464,13 @@
 
 
 (defn read-range-request
-  "'by-what?' can be :sequence, :time, or position (the default if
-  none is provided)."
+  "'by-what?' can be :sequence, :time, or :position (the default if none is provided)."
   [object-identifier property-identifier array-index [reference range] & by-what?]
   (ReadRangeRequest.
    (c/clojure->bacnet :object-identifier object-identifier)
    (c/clojure->bacnet :property-identifier property-identifier)
-   (c/clojure->bacnet :unsigned-integer array-index)
+   (when array-index ; Should be nil unless we try to read an array
+     (c/clojure->bacnet :unsigned-integer array-index))
    (read-range-request-by reference range (first by-what?))))
 
 (defn read-range
