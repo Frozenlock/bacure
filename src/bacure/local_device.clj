@@ -11,10 +11,10 @@
             [bacure.serial-connection :as serial]
             [bacure.state :as state]
             [clojure.tools.logging :as log])
-  (:import [com.serotonin.bacnet4j LocalDevice]
-           [com.serotonin.bacnet4j.npdu.ip IpNetwork]
-           [com.serotonin.bacnet4j.transport DefaultTransport]
-           [java.net InetSocketAddress]))
+  (:import (com.serotonin.bacnet4j LocalDevice)
+           (com.serotonin.bacnet4j.npdu.ip IpNetwork)
+           (com.serotonin.bacnet4j.transport DefaultTransport)
+           (java.net InetSocketAddress)))
 
 (comment
   :bacure.coerce.type.constructed/side-effect
@@ -499,7 +499,7 @@
   automatically receive broadcasts.
 
   You probably want to register them as foreign devices or use
-  `local-registered-test-devices!` instead."
+  `remote-device/local-registered-test-devices!` instead."
   [qty port]
   (let [ids-and-addr (for [i (range 1 (inc qty))]
                        {:id i :ip-address (str "127.0.0."i)})]
@@ -513,17 +513,4 @@
         (initialize! id)))
     ids-and-addr))
 
-(defn local-registered-test-devices!
-  "Boot up local devices and return their IDs.
-  The devices are registered as foreign devices to each other."
-  [qty]
-  (let [port 47555 ; Unlikely to mess with existing BACnet network.
-        id->ip (into {} (map (juxt :id :ip-address) (local-test-devices! qty port)))]
-    ;; Make devices aware of each other
-    (doseq [[ld-id _] id->ip] ; current local device
-      (doseq [[_ rd-ip] (dissoc id->ip ld-id)] ; all the other devices
-        (register-as-foreign-device ld-id rd-ip port 60)))
-    (doseq [id (keys id->ip)]
-      (i-am-broadcast! id))
-    (Thread/sleep 50)
-    (keys id->ip)))
+

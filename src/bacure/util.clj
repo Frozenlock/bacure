@@ -19,6 +19,18 @@
                         (for [item symbols]
                           [(keyword item) item])))))
 
+(defn wait-while
+  "Blocks until predicate returns false, or throws if timeout."
+  [predicate-fn timeout-ms]
+  (let [*p (promise)]
+    (future
+      (while (and (not (realized? *p))
+                  (predicate-fn))
+        (Thread/sleep 5))
+      (deliver *p true))
+    (when (= (deref *p timeout-ms :timeout) :timeout)
+      (deliver *p :timeout)
+      (throw (ex-info "Timeout" {:timeout-ms timeout-ms})))))
 
 
 ;; ================================================================

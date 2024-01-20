@@ -1,6 +1,7 @@
 (ns bacure.test.foreign-device
   (:require [bacure.local-device :as ld]
             [bacure.remote-device :as rd]
+            [bacure.util :as util]
             [clojure.test :refer :all]))
 
 (deftest foreign-devices
@@ -18,7 +19,7 @@
         ;; now register as a foreign device
         (ld/register-as-foreign-device 1 "127.0.0.2" port 60)
         (ld/i-am-broadcast! 1)
-        (Thread/sleep 50)
+        (util/wait-while #(empty? (rd/remote-devices 2)) 500)
         ;; at this point the device 2 should be aware that device 1
         ;; exists.
         (is (-> (rd/remote-devices 2)

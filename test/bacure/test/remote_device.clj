@@ -8,7 +8,7 @@
 
 (deftest basic-read-properties
   (ld/with-temp-devices
-    (let [[ld-id rd-id] (ld/local-registered-test-devices! 2)]
+    (let [[ld-id rd-id] (rd/local-registered-test-devices! 2)]
       (testing "Partition array"
         (with-redefs [services/send-request-promise (constantly {:success 10})]
           (let [expected-result (into [] (for [i (range 1 11)]
@@ -18,7 +18,7 @@
 
 (deftest extended-information
   (ld/with-temp-devices
-    (let [[ld-id rd-id] (ld/local-registered-test-devices! 2)]
+    (let [[ld-id rd-id] (rd/local-registered-test-devices! 2)]
       ;; initially we shouldn't have this data
       (is (= nil (rd/cached-extended-information ld-id rd-id)))
       ;; now try to retrieve it
@@ -29,7 +29,7 @@
 (deftest read-properties
   (ld/with-temp-devices
     ;; first we create the local devices
-    (let [[ld-id rd-id] (ld/local-registered-test-devices! 2)]
+    (let [[ld-id rd-id] (rd/local-registered-test-devices! 2)]
       (is (some #{rd-id} (rd/remote-devices ld-id))
           (str "This test requires a device with ID "rd-id " on the network."))
       

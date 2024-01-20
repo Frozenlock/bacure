@@ -357,3 +357,29 @@
                          device-id
                          [[[:device device-id] :system-status]])
      (catch Exception e nil))))
+
+
+
+;; ================================================================
+;; Test helpers
+;; ================================================================
+
+
+(defn local-registered-test-devices!
+  "Boot up local devices and return their IDs.
+  The devices are registered as foreign devices to each other."
+  [qty]
+  (let [port 47555 ; Unlikely to mess with existing BACnet network.
+        id->ip (into {} (map (juxt :id :ip-address) (ld/local-test-devices! qty port)))
+        know-each-other? (fn [ids]
+                           (every? #(= (set (remove #{%} ids))
+                                       (remote-devices %))
+                                   ids))]
+    ;; Make devices aware of each other
+    (doseq [[ld-id _] id->ip] ; current local device
+      (doseq [[_ rd-ip] (dissoc id->ip ld-id)] ; all the other devices
+        (ld/register-as-foreign-device ld-id rd-ip port 60)))
+    (doseq [id (keys id->ip)]
+      (ld/i-am-broadcast! id))
+    (util/wait-while #(not (know-each-other? (keys id->ip))) 500)
+    (keys id->ip)))
