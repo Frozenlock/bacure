@@ -490,3 +490,40 @@
      (if (= (type ret#) ::e)
        (throw (:e ret#))
        ret#)))
+
+(defn local-test-devices!
+  "Generate multiple devices with a unique IP address.
+  (127.0.0.1, 127.0.0.2, etc.)
+
+  They don't bind to anylocal (\"0.0.0.0\") and thus won't
+  automatically receive broadcasts.
+
+  You probably want to register them as foreign devices or use
+  `local-registered-test-devices!` instead."
+  [qty port]
+  (let [ids-and-addr (for [i (range 1 (inc qty))]
+                       {:id i :ip-address (str "127.0.0."i)})]
+    (doseq [m ids-and-addr]
+      (let [id (:id m)]
+        (new-local-device!
+         {:port              port
+          :device-id         id
+          :local-address     (:ip-address m)
+          :broadcast-address "127.0.0.255"})
+        (initialize! id)))
+    ids-and-addr))
+
+(defn local-registered-test-devices!
+  "Boot up local devices and return their IDs.
+  The devices are registered as foreign devices to each other."
+  [qty]
+  (let [port 47555 ; Unlikely to mess with existing BACnet network.
+        id->ip (into {} (map (juxt :id :ip-address) (local-test-devices! qty port)))]
+    ;; Make devices aware of each other
+    (doseq [[ld-id _] id->ip] ; current local device
+      (doseq [[_ rd-ip] (dissoc id->ip ld-id)] ; all the other devices
+        (register-as-foreign-device ld-id rd-ip port 60)))
+    (doseq [id (keys id->ip)]
+      (i-am-broadcast! id))
+    (Thread/sleep 50)
+    (keys id->ip)))

@@ -3,29 +3,12 @@
   (:require [bacure.local-device :as ld]
             [bacure.read-properties :as rp]
             [bacure.remote-device :as rd]
-            [bacure.test.foreign-device :as fd]
             [bacure.services :as services]
             [bacure.network :as net]))
 
-(defn init-local-test-devices!
-  "Boot up local devices and return their IDs.
-  The devices are registered as foreign devices to each other."
-  [qty]
-  (let [id->ip (into {} (map (juxt :id :ip-address) (fd/generate-local-devices! qty)))]
-    ;; Make devices aware of each other
-    (doseq [[ld-id _] id->ip] ; current local device
-      (doseq [[_ rd-ip] (dissoc id->ip ld-id)] ; all the other devices
-        (ld/register-as-foreign-device ld-id rd-ip 47808 60)))
-    (doseq [id (keys id->ip)]
-      (ld/i-am-broadcast! id))
-    (Thread/sleep 50)
-    (keys id->ip)))
-
-
-
 (deftest basic-read-properties
   (ld/with-temp-devices
-    (let [[ld-id rd-id] (init-local-test-devices! 2)]
+    (let [[ld-id rd-id] (ld/local-registered-test-devices! 2)]
       (testing "Partition array"
         (with-redefs [services/send-request-promise (constantly {:success 10})]
           (let [expected-result (into [] (for [i (range 1 11)]
@@ -35,7 +18,7 @@
 
 (deftest extended-information
   (ld/with-temp-devices
-    (let [[ld-id rd-id] (init-local-test-devices! 2)]
+    (let [[ld-id rd-id] (ld/local-registered-test-devices! 2)]
       ;; initially we shouldn't have this data
       (is (= nil (rd/cached-extended-information ld-id rd-id)))
       ;; now try to retrieve it
@@ -46,7 +29,7 @@
 (deftest read-properties
   (ld/with-temp-devices
     ;; first we create the local devices
-    (let [[ld-id rd-id] (init-local-test-devices! 2)]
+    (let [[ld-id rd-id] (ld/local-registered-test-devices! 2)]
       (is (some #{rd-id} (rd/remote-devices ld-id))
           (str "This test requires a device with ID "rd-id " on the network."))
       

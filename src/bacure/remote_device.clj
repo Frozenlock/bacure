@@ -346,10 +346,6 @@
     ;; fallback to writing properties individually
     (write-single-multiple-properties local-device-id device-id write-access-specifications)))
 
-;; ;; ================================================================
-;; ;; Maintenance of the remote devices list
-;; ;; ================================================================
-
 (defn is-alive?
   "Check if the remote device is still alive. This is the closest
   thing to a 'ping' in the BACnet world."

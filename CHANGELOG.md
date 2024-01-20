@@ -1,6 +1,7 @@
 # Changelog
 ## Unreleased
 - `with-temp-devices` no longer terminates and restarts the local device.
+- Add `local-test-devices!` and `local-registered-test-devices!` as public test helpers.
 
 ## [1.1.10] - 2022-11-26
 - Fix `read-range-request` to allow having a nil array index;
