@@ -367,31 +367,6 @@
   (doseq [ld-id (list-local-devices)]
     (terminate! ld-id)))
 
-(defmacro with-temp-devices
-  "Execute body with a temporary set of local-devices. Any existing
-  devices will be terminated before the body executes and re-initiated
-  after. Useful for tests."
-  [& body]
-  `(let [initiated-devices# (doall
-                             (for [id# (list-local-devices)
-                                   :when (.isInitialized (local-device-object id#))] id#))]
-     (terminate-all!)
-     (let [result# (atom nil)
-           error# (atom nil)]
-       (with-redefs [state/local-devices (atom {})]
-         (try (let [ret# (do ~@body)]
-                (reset! result# (if (seq? ret#) ; Prevent result from being lazy
-                                  (doall ret#)
-                                  ret#)))
-              (catch Exception e#
-                (reset! error# e#))
-              (finally (terminate-all!))))
-       (doseq [id# initiated-devices#]
-         (initialize! id#))
-       (if-let [err# @error#]
-         (throw err#)
-         @result#))))
-
 (defn- replace-object-identifier-by-device-id
   "Replace any object-identifier key by a device-id.
 
@@ -494,3 +469,24 @@
 
 (def disable-communications! (partial set-communication-state! :disable))
 (def enable-communications! (partial set-communication-state! :enable))
+
+
+;; ================================================================
+;; Test helpers
+;; ================================================================
+
+(defmacro with-temp-devices
+  "Execute body with a temporary set of local-devices. Useful for tests.
+  Warning: uses `with-redefs`, don't use concurrently (ex: pmap)."
+  [& body]
+  `(let [ret# (with-redefs [state/local-devices (atom {})]
+                (try (let [ret# (do ~@body)]
+                       (if (seq? ret#)         ; Prevent result from being lazy
+                         (doall ret#)
+                         ret#))
+                     (catch Exception e#
+                       ^{:type ::e} {:e e#})
+                     (finally (terminate-all!))))]
+     (if (= (type ret#) ::e)
+       (throw (:e ret#))
+       ret#)))

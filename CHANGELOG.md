@@ -1,5 +1,6 @@
 # Changelog
 ## Unreleased
+- `with-temp-devices` no longer terminates and restarts the local device.
 
 ## [1.1.10] - 2022-11-26
 - Fix `read-range-request` to allow having a nil array index;
