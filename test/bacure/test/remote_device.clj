@@ -74,6 +74,10 @@
         (is (= (rd/delete-remote-object! ld-id rd-id [:analog-input 1])
                {:error {:error-class :object :error-code :unknown-object}}))
 
+        ;; --- Object creation ----
+        ;; We currently can't create many objects because Bacnet4J has limited the acceptable object-types.
+        ;; See https://github.com/MangoAutomation/BACnet4J/blob/594226c2890ee7959e08471564a4c3e85ac0a431/src/main/java/com/serotonin/bacnet4j/service/confirmed/CreateObjectRequest.java#L82
+
         ;; ;; create the new object
         ;; (is (:success (rd/create-remote-object! ld-id rd-id {:object-identifier [:analog-input 1]
         ;;                                                      :object-name "Test analog"
