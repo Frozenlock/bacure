@@ -21,7 +21,7 @@
                  [clj-serial "2.0.5"]
                  [clj-time "0.15.2"]]
   :repl-options {:init-ns user}
-  :plugins [[lein-codox "0.10.7"]]
+  :plugins [[lein-codox "0.10.8"]]
   :codox {;; see https://github.com/weavejester/codox/wiki/Deploying-to-GitHub-Pages
           :output-path "codox"
           :namespaces [#"^bacure\."]
