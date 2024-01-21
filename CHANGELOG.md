@@ -1,5 +1,7 @@
 # Changelog
 ## Unreleased
+
+## [1.2.0] - 2024-01-21
 - `with-temp-devices` no longer terminates and restarts the local device.
 - Add `local-test-devices!` and `local-registered-test-devices!` as public test helpers.
 
