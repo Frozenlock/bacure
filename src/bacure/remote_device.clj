@@ -234,10 +234,12 @@
   ([] (discover-network nil))
   ([local-device-id] (discover-network local-device-id 5))
   ([local-device-id tries]
-   (dorun
-    (->> (repeatedly tries #(find-remote-devices-and-extended-information local-device-id {}))
-         (take-while empty?)))
-   (remote-devices local-device-id)))
+   (loop [remaining-tries tries]
+     (when (> remaining-tries 0)
+       (let [ids (find-remote-devices-and-extended-information local-device-id {})]
+         (if (not-empty ids)
+           ids
+           (recur (dec remaining-tries))))))))
 
 
 (defnd create-remote-object!
