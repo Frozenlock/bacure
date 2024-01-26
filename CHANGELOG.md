@@ -2,6 +2,7 @@
 ## Unreleased
 - Fix lazyness bug in `discover-network`: was sending multiple `Who-Is` simultaneously.
 - `boot-up!` returns the device ID.
+- (Private/impl) Introduce per-device threadpool for better network control.
 
 ## [1.2.0] - 2024-01-21
 - `with-temp-devices` no longer terminates and restarts the local device.

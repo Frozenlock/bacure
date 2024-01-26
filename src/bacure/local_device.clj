@@ -10,7 +10,8 @@
             [bacure.network :as net]
             [bacure.serial-connection :as serial]
             [bacure.state :as state]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [com.climate.claypoole :as claypoole])
   (:import (com.serotonin.bacnet4j LocalDevice)
            (com.serotonin.bacnet4j.npdu.ip IpNetwork)
            (com.serotonin.bacnet4j.transport DefaultTransport)
@@ -174,6 +175,8 @@
                                  :remote-devices {}
                                  :remote-objects {}
                                  :cov-events {}
+                                 :-threadpool (claypoole/priority-threadpool
+                                               20 :name (str "bacnet-"device-id))
                                  :init-configs (merge configs
                                                       {:device-id device-id
                                                        :broadcast-address broadcast-address
@@ -356,6 +359,9 @@
   connection in its MS/TP node thread and it'll throw angrily.)"
   ([] (terminate! nil))
   ([local-device-id]
+   (some-> (get-local-device local-device-id)
+           :-threadpool
+           claypoole/shutdown)
    (let [ldo (local-device-object local-device-id)]
      (when (.isInitialized ldo)
        (.terminate ldo)))

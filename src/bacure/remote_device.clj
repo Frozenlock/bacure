@@ -1,11 +1,12 @@
 (ns bacure.remote-device
   (:require [bacure.coerce :as c]
             [bacure.coerce.obj :as obj]
+            [bacure.events :as events]
             [bacure.local-device :as ld]
             [bacure.read-properties :as rp]
             [bacure.services :as services]
-            [bacure.events :as events]
-            [bacure.util :as util :refer [defnd]])
+            [bacure.util :as util :refer [defnd]]
+            [com.climate.claypoole :as claypoole])
   (:import (com.serotonin.bacnet4j RemoteDevice
                                    event.DeviceEventAdapter
                                    service.confirmed.CreateObjectRequest
@@ -109,7 +110,16 @@
   [local-device-id]
   (proxy [DeviceEventAdapter] []
     (iAmReceived [remote-device]
-      (extended-information local-device-id (.getInstanceNumber remote-device)))))
+      ;; Use the device's threadpool for better control over total
+      ;; simultaneous network requests. If 1000 devices answer in 2
+      ;; seconds, don't immediately flood the network with 1000
+      ;; separate read requests.
+      (let [r-id (.getInstanceNumber remote-device)
+            pool (some-> (ld/get-local-device local-device-id)
+                         :-threadpool
+                         ;; Background process: low priority
+                         (claypoole/with-priority 0))]
+        @(claypoole/future pool (extended-information local-device-id r-id))))))
 
 (defnd remote-devices
   "Return the list of the current remote devices. These devices must
@@ -135,10 +145,13 @@
 
    Remote devices are queried in parallel."
   [local-device-id]
-  (doall
-   (pmap #(try (extended-information local-device-id %)
-               (catch Exception e))
-         (remote-devices local-device-id))))
+  (let [pool (some-> (ld/get-local-device local-device-id)
+                     :-threadpool
+                     (claypoole/with-priority 1))]
+    (claypoole/upmap pool
+                     #(try (extended-information local-device-id %)
+                           (catch Exception e))
+                     (remote-devices local-device-id))))
 
 (defn- remote-object-matches?
   [[object-identifier remote-object] object-identifier-or-name]

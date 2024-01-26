@@ -15,6 +15,9 @@
                  [lohbihler/sero-scheduler "1.1.0"
                   :exclusions [org.slf4j/slf4j-api]]
 
+                 ;; Threadpool tools (pmap)
+                 [org.clj-commons/claypoole "1.2.2"]
+
                  ;; logging
                  [org.clojure/tools.logging "1.2.4"]
 
