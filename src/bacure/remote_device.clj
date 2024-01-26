@@ -379,6 +379,19 @@
 ;; Test helpers
 ;; ================================================================
 
+;; Unfortunately, it's currently impossible to have multiple local
+;; devices on the same IP/port for anything else than sending
+;; broadcasts. This is because the OS will dispatch the UDP packets to
+;; one of the device and ignore all the others.
+;;
+;; For example, let's assume we have device 1, 2 and 3.  Device 3
+;; sends a read request for [:device 2], but this request is read by
+;; device 1.  Device 1 will check its list of objects and correctly
+;; respond with a BACnet error, as it doesn't have any [:device 2]
+;; object.
+;;
+;; One possible approach to solve this would be to have a middleware
+;; to dispatch the messages to the correct local device.
 
 (defn local-registered-test-devices!
   "Boot up local devices and return their IDs.
