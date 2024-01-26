@@ -4,21 +4,22 @@
             [bacure.read-properties :as rp]
             [clojure.walk :as walk]
             [bacure.events :as events]))
-   
+
 (defn boot-up!
   "Create a local-device, load its config file, initialize it, and
-  find the remote devices." 
+  find the remote devices. Return device-id."
   ([] (boot-up! nil))
   ([configs]
-   (let [device-id (:device-id configs)]
-     (ld/load-local-device-backup! device-id configs)
+   (let [device-id (:device-id configs)
+         _ (ld/load-local-device-backup! device-id configs)
+         device-id (or device-id (get-in (ld/get-local-device nil)
+                                         [:init-configs :device-id]))]
      (ld/maybe-register-as-foreign-device! device-id)
-     ;; automatcially fetch extended info when receiving a IAm
+     ;; automatically fetch extended info when receiving a IAm
      (->> (rd/IAm-received-auto-fetch-extended-information device-id)
           (ld/add-listener! device-id))
-     ;(ld/i-am-broadcast! device-id) ; <--- not necessary if we send a global WhoIS, as we will send an IAm in response.
-     (future (rd/discover-network device-id)
-             true))))
+     (future (rd/discover-network device-id))
+     device-id)))
 
 
 (defn find-bacnet-port
