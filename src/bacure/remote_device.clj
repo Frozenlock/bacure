@@ -5,6 +5,7 @@
             [bacure.local-device :as ld]
             [bacure.read-properties :as rp]
             [bacure.services :as services]
+            [bacure.state :as state]
             [bacure.util :as util :refer [defnd]]
             [com.climate.claypoole :as claypoole])
   (:import (com.serotonin.bacnet4j RemoteDevice
@@ -77,26 +78,33 @@
   "Retrieve the remote device extended information (name, segmentation,
   property multiple, etc..) and update it locally.
 
-  Return the cached extended information."
+  Return the cached extended information or nil if it couldn't be retrieved."
   [local-device-id device-id]
-  (when-let [dev (rd local-device-id device-id)]
-    ;; first step is to see if the device support read-property-multiple to enable faster read
-    (let [services ;; don't do anything else if we can't get the protocol supported
-          (-> (rp/read-individually local-device-id device-id [[[:device device-id]
-                                                                :protocol-services-supported]])
-              (first)
-              (:protocol-services-supported))]
-      (when-not (:error services)
-        (set-device-property! dev :protocol-services-supported services)
-        ;; then we can query for more info
-        (let [remaining-properties (remove #{:protocol-services-supported} extended-information-properties)
-              result               (first (rp/read-properties local-device-id device-id
-                                                              [[[:device device-id] :object-name
-                                                                :protocol-version :protocol-revision]]))]
-          (doseq [[k v] result]
-            (when-not (:error v)
-              (set-device-property! dev k v))))
-        (cached-extended-information local-device-id device-id)))))
+  (when-not (state/get-in-local-device local-device-id [::ext-info device-id])
+    (when-let [dev (rd local-device-id device-id)]
+      (try
+        ;; Avoid simultaneous extended-info fetches
+        (state/assoc-in-local-device! local-device-id [::ext-info device-id] :fetching)
+
+        ;; first step is to see if the device support read-property-multiple to enable faster read
+        (let [services ;; don't do anything else if we can't get the protocol supported
+              (-> (rp/read-individually local-device-id device-id [[[:device device-id]
+                                                                    :protocol-services-supported]])
+                  (first)
+                  (:protocol-services-supported))]
+          (when-not (:error services)
+            (set-device-property! dev :protocol-services-supported services)
+            ;; then we can query for more info
+            (let [remaining-properties (remove #{:protocol-services-supported} extended-information-properties)
+                  result               (first (rp/read-properties local-device-id device-id
+                                                                  [[[:device device-id] :object-name
+                                                                    :protocol-version :protocol-revision]]))]
+              (doseq [[k v] result]
+                (when-not (:error v)
+                  (set-device-property! dev k v))))
+            (cached-extended-information local-device-id device-id)))
+        (finally
+          (state/assoc-in-local-device! local-device-id [::ext-info device-id] nil))))))
 
 (defnd extended-information
   "Return the device extended information that we have cached locally,
