@@ -110,16 +110,9 @@
   [local-device-id]
   (proxy [DeviceEventAdapter] []
     (iAmReceived [remote-device]
-      ;; Use the device's threadpool for better control over total
-      ;; simultaneous network requests. If 1000 devices answer in 2
-      ;; seconds, don't immediately flood the network with 1000
-      ;; separate read requests.
-      (let [r-id (.getInstanceNumber remote-device)
-            pool (some-> (ld/get-local-device local-device-id)
-                         :-threadpool
-                         ;; Background process: low priority
-                         (claypoole/with-priority 0))]
-        @(claypoole/future pool (extended-information local-device-id r-id))))))
+      (let [r-id (.getInstanceNumber remote-device)]
+        (try (extended-information local-device-id r-id)
+             (catch Exception e))))))
 
 (defnd remote-devices
   "Return the list of the current remote devices. These devices must
