@@ -1,5 +1,7 @@
 # Changelog
 ## Unreleased
+
+## [1.2.1] - 2024-02-18
 - Fix lazyness bug in `discover-network`: was sending multiple `Who-Is` simultaneously.
 - `boot-up!` returns the device ID.
 - (Private/impl) Introduce per-device threadpool for better network control.
