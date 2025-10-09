@@ -1,4 +1,4 @@
-(defproject bacure "1.2.1"
+(defproject bacure "1.2.2"
   :description "A Clojure wrapper for the bacnet4j library... and some nice additions."
   :url "https://hvac.io"
   :license {:name "GNU General Public License V3"
@@ -7,7 +7,7 @@
                  "ias-releases" "https://maven.mangoautomation.net/repository/ias-release/"}
   :dependencies [[org.clojure/clojure "1.10.3"]
 
-                 [com.infiniteautomation/bacnet4j "6.0.0"
+                 [com.infiniteautomation/bacnet4j "6.0.2"
                   ;; to avoid version range (and repeatability issues), exclude a few dependencies
                   :exclusions [org.slf4j/slf4j-api lohbihler/sero-scheduler]]
                  ;; now require a precise version
