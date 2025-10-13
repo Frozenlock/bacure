@@ -5,20 +5,20 @@
 
 (deftest test-access-rule
   (is (example :access-rule))
-  (is (= (-> (clojure->bacnet :access-rule 
-                              {:time-range [[:analog-input 0] [[:analog-input 0] :acked-transitions]], 
-                               :location [[:analog-input 0] [:analog-input 0]], 
+  (is (= (-> (clojure->bacnet :access-rule
+                              {:time-range [[:analog-input 0] [[:analog-input 0] :acked-transitions]],
+                               :location [[:analog-input 0] [:analog-input 0]],
                                :enable true})
              (bacnet->clojure))
-         {:time-range [[:analog-input 0] [[:analog-input 0] :acked-transitions]], 
-                               :location [[:analog-input 0] [:analog-input 0]], 
+         {:time-range [[:analog-input 0] [[:analog-input 0] :acked-transitions]],
+                               :location [[:analog-input 0] [:analog-input 0]],
           :enable true})))
 
 (deftest test-accumulator-record
   (is (example :accumulator-record))
-  (let [accu-map {:timestamp "2016-01-17T21:09:45.180Z", 
-                  :present-value 0, 
-                  :accumulated-value 0, 
+  (let [accu-map {:timestamp "2016-01-17T21:09:45.180Z",
+                  :present-value 0,
+                  :accumulated-value 0,
                   :accumulator-status :normal}]
     (is (= (-> (clojure->bacnet :accumulator-record accu-map)
                (bacnet->clojure))
@@ -56,9 +56,86 @@
 
 
 (deftest test-address
-  (is (= (-> (clojure->bacnet :address {:mac-address [-64 -88 0 -1 -70 -64], :network-number 0})
+  ;; BACnet/IP (IPv4:Port) - 6 bytes
+  ;; Input as byte vector
+  (is (= (-> (clojure->bacnet :address {:mac-address [-64 -88 1 115 -70 -64], :network-number 0})
              (bacnet->clojure))
-         {:mac-address [-64 -88 0 -1 -70 -64], :network-number 0})))
+         {:mac-address "192.168.1.115:47808", :network-number 0}))
+
+  ;; Input as IPv4:Port string
+  (is (= (-> (clojure->bacnet :address {:mac-address "192.168.1.115:47808", :network-number 0})
+             (bacnet->clojure))
+         {:mac-address "192.168.1.115:47808", :network-number 0}))
+
+  ;; Different port number
+  (is (= (-> (clojure->bacnet :address {:mac-address "10.0.0.1:8080", :network-number 100})
+             (bacnet->clojure))
+         {:mac-address "10.0.0.1:8080", :network-number 100}))
+
+  ;; MS/TP station address - 1 byte
+  ;; Input as byte vector
+  (is (= (-> (clojure->bacnet :address {:mac-address [5], :network-number 0})
+             (bacnet->clojure))
+         {:mac-address "5", :network-number 0}))
+
+  ;; Input as station number string
+  (is (= (-> (clojure->bacnet :address {:mac-address "5", :network-number 0})
+             (bacnet->clojure))
+         {:mac-address "5", :network-number 0}))
+
+  ;; MS/TP boundary values
+  (is (= (-> (clojure->bacnet :address {:mac-address "0", :network-number 0})
+             (bacnet->clojure))
+         {:mac-address "0", :network-number 0}))
+
+  (is (= (-> (clojure->bacnet :address {:mac-address "127", :network-number 0})
+             (bacnet->clojure))
+         {:mac-address "127", :network-number 0}))
+
+  ;; BACnet/IPv6 - 18 bytes
+  ;; Input as byte vector
+  (is (= (-> (clojure->bacnet :address {:mac-address [32 1 13 -72 0 0 0 0 0 0 0 0 0 0 0 1 -70 -64], :network-number 0})
+             (bacnet->clojure))
+         {:mac-address "2001:db8:0:0:0:0:0:1:47808", :network-number 0}))
+
+  ;; Input as compressed IPv6:Port string
+  (is (= (-> (clojure->bacnet :address {:mac-address "2001:db8::1:47808", :network-number 0})
+             (bacnet->clojure))
+         {:mac-address "2001:db8:0:0:0:0:0:1:47808", :network-number 0}))
+
+  ;; Verify uncompressed IPv6 input also works
+  (is (= (-> (clojure->bacnet :address {:mac-address "2001:db8:0:0:0:0:0:1:47808", :network-number 5})
+             (bacnet->clojure))
+         {:mac-address "2001:db8:0:0:0:0:0:1:47808", :network-number 5}))
+
+  ;; IPv6 with different port
+  (is (= (-> (clojure->bacnet :address {:mac-address "fe80::1:9999", :network-number 0})
+             (bacnet->clojure))
+         {:mac-address "fe80:0:0:0:0:0:0:1:9999", :network-number 0}))
+
+  ;; Hex string with 6 bytes is interpreted as IPv4:Port (this is correct BACnet/IP behavior)
+  (is (= (-> (clojure->bacnet :address {:mac-address "C0A800FFBAC0", :network-number 0})
+             (bacnet->clojure))
+         {:mac-address "192.168.0.255:47808", :network-number 0}))
+
+  ;; Various hex string formats with separators (6 bytes = IPv4:Port)
+  (is (= (-> (clojure->bacnet :address {:mac-address "C0:A8:00:FF:BA:C0", :network-number 0})
+             (bacnet->clojure))
+         {:mac-address "192.168.0.255:47808", :network-number 0}))
+
+  (is (= (-> (clojure->bacnet :address {:mac-address "c0-a8-00-ff-ba-c0", :network-number 0})
+             (bacnet->clojure))
+         {:mac-address "192.168.0.255:47808", :network-number 0}))
+
+  ;; Hex string with non-standard length falls back to hex representation
+  (is (= (-> (clojure->bacnet :address {:mac-address "C0A800FF", :network-number 0})
+             (bacnet->clojure))
+         {:mac-address "C0A800FF", :network-number 0}))
+
+  ;; Hex string with 2 bytes
+  (is (= (-> (clojure->bacnet :address {:mac-address "ABCD", :network-number 0})
+             (bacnet->clojure))
+         {:mac-address "ABCD", :network-number 0})))
 
 (deftest test-daily-schedule
   (is (example :daily-schedule))
@@ -141,7 +218,7 @@
 
 (deftest test-sequence-of
   (is (example :sequence-of))
-  (is (= (-> (clojure->bacnet :sequence-of (map (partial clojure->bacnet :property-identifier) 
+  (is (= (-> (clojure->bacnet :sequence-of (map (partial clojure->bacnet :property-identifier)
                                                 [:acked-transitions :action]))
              (bacnet->clojure))
          [:acked-transitions :action])))
@@ -176,7 +253,25 @@
     (is (-> (clojure->bacnet :recipient oi)
             (bacnet->clojure)
             (= oi))))
-  (let [address {:mac-address [-64 -88 0 -1 -70 -64], :network-number 0}]
+  ;; Address with IPv4:Port format (6 bytes)
+  (let [address {:mac-address "192.168.1.115:47808", :network-number 0}]
+    (is (-> (clojure->bacnet :recipient address)
+            (bacnet->clojure)
+            (= address))))
+  ;; Accepts byte vector for IPv4:Port
+  (let [address-bytes {:mac-address [-64 -88 1 115 -70 -64], :network-number 0}
+        address-ip {:mac-address "192.168.1.115:47808", :network-number 0}]
+    (is (-> (clojure->bacnet :recipient address-bytes)
+            (bacnet->clojure)
+            (= address-ip))))
+  ;; Hex string with 6 bytes is interpreted as IPv4:Port
+  (let [address-hex {:mac-address "C0A800FFBAC0", :network-number 0}
+        address-ip {:mac-address "192.168.0.255:47808", :network-number 0}]
+    (is (-> (clojure->bacnet :recipient address-hex)
+            (bacnet->clojure)
+            (= address-ip))))
+  ;; Hex string with non-standard length stays as hex
+  (let [address {:mac-address "C0A800FF", :network-number 0}]
     (is (-> (clojure->bacnet :recipient address)
             (bacnet->clojure)
             (= address)))))

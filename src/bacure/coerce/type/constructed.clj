@@ -151,15 +151,122 @@
   (bacnet->clojure (.getAction o)))
 
 ;;;
+;; Address coercion with MAC address as hex string
+
+(defn- bytes->mac-string
+  "Convert byte sequence to human-readable MAC address string based on BACnet transport type.
+  Detects transport type by byte length:
+  - 1 byte:  MS/TP station address -> \"5\"
+  - 6 bytes: BACnet/IP (IPv4:Port) -> \"192.168.1.115:47808\"
+  - 18 bytes: BACnet/IPv6 (IPv6:Port) -> \"2001:db8::1:47808\"
+  - Other: Fallback to hex string -> \"C0A800FF\""
+  [bytes]
+  (when bytes
+    (let [byte-vec (vec bytes)
+          len (count byte-vec)]
+      (case len
+        ;; MS/TP: 1 byte station address (0-127)
+        1 (str (bit-and 0xFF (first byte-vec)))
+
+        ;; BACnet/IP (IPv4): 4 bytes IP + 2 bytes port
+        6 (let [ip-bytes (subvec byte-vec 0 4)
+                port-bytes (subvec byte-vec 4 6)
+                ip (clojure.string/join "." (map #(bit-and 0xFF %) ip-bytes))
+                port (+ (bit-shift-left (bit-and 0xFF (first port-bytes)) 8)
+                        (bit-and 0xFF (second port-bytes)))]
+            (str ip ":" port))
+
+        ;; BACnet/IPv6: 16 bytes IPv6 + 2 bytes port
+        18 (let [ipv6-bytes (subvec byte-vec 0 16)
+                 port-bytes (subvec byte-vec 16 18)
+                 ;; Use Java's Inet6Address for proper compression
+                 ipv6-addr (java.net.Inet6Address/getByAddress nil (byte-array ipv6-bytes) nil)
+                 ipv6-str (.getHostAddress ipv6-addr)
+                 port (+ (bit-shift-left (bit-and 0xFF (first port-bytes)) 8)
+                         (bit-and 0xFF (second port-bytes)))]
+             (str ipv6-str ":" port))
+
+        ;; Fallback: plain hex string for unknown formats
+        (->> byte-vec
+             (map #(format "%02X" (bit-and 0xFF %)))
+             (apply str))))))
+
+(defn- mac-string->bytes
+  "Convert MAC address string to byte sequence.
+  Accepts multiple formats:
+  - MS/TP: \"5\" -> [5]
+  - IPv4:Port: \"192.168.1.115:47808\" -> [-64 -88 1 115 -70 -64]
+  - IPv6:Port: \"2001:db8::1:47808\" -> [32 1 13 184 0 0 0 0 0 0 0 0 0 0 0 1 -70 -64]
+  - Hex: \"C0A800FF\" or \"C0:A8:00:FF\" or \"c0-a8-00-ff\" -> [-64 -88 0 -1]"
+  [s]
+  (when s
+    (cond
+      ;; IPv4:Port format (e.g., "192.168.1.115:47808")
+      (re-matches #"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+$" s)
+      (let [[ip-str port-str] (clojure.string/split s #":")
+            ip-parts (map #(Integer/parseInt %) (clojure.string/split ip-str #"\."))
+            port (Integer/parseInt port-str)
+            ip-bytes (mapv unchecked-byte ip-parts)
+            port-bytes [(unchecked-byte (bit-shift-right port 8))
+                        (unchecked-byte (bit-and port 0xFF))]]
+        (into ip-bytes port-bytes))
+
+      ;; IPv6:Port format (e.g., "2001:db8::1:47808" or "2001:db8:0:0:0:0:0:1:47808")
+      ;; Look for hex:colon pattern with port at the end (but not IPv4 which has dots)
+      (and (re-find #"^[0-9a-fA-F:]+:\d+$" s) (not (re-find #"\." s)))
+      (let [last-colon-idx (.lastIndexOf s ":")
+            ipv6-str (subs s 0 last-colon-idx)
+            port-str (subs s (inc last-colon-idx))
+            port (Integer/parseInt port-str)
+            ;; Use Java's InetAddress to parse IPv6 (handles both compressed and uncompressed)
+            ipv6-bytes (try
+                        (.getAddress (java.net.InetAddress/getByName ipv6-str))
+                        (catch Exception e
+                          ;; Fallback: manual parsing if Java fails
+                          (let [parts (clojure.string/split ipv6-str #":" -1)
+                                num-parts (count parts)
+                                missing-groups (- 8 (dec num-parts))
+                                expanded-parts (mapcat (fn [part]
+                                                        (if (empty? part)
+                                                          (repeat missing-groups "0")
+                                                          [part]))
+                                                      parts)]
+                            (byte-array
+                             (mapcat (fn [hex-str]
+                                      (let [val (Integer/parseInt (or (not-empty hex-str) "0") 16)]
+                                        [(unchecked-byte (bit-shift-right val 8))
+                                         (unchecked-byte (bit-and val 0xFF))]))
+                                    (take 8 expanded-parts))))))
+            port-bytes [(unchecked-byte (bit-shift-right port 8))
+                        (unchecked-byte (bit-and port 0xFF))]]
+        (vec (concat ipv6-bytes port-bytes)))
+
+      ;; Plain number for MS/TP station
+      (re-matches #"^\d+$" s)
+      [(unchecked-byte (Integer/parseInt s))]
+
+      ;; Hex string (with or without separators)
+      :else
+      (let [hex-only (clojure.string/replace s #"[^0-9A-Fa-f]" "")]
+        (->> (partition 2 hex-only)
+             (map (fn [[a b]] (unchecked-byte (Integer/parseInt (str a b) 16))))
+             (into []))))))
 
 (defmethod clojure->bacnet :address
   [_ value]
-  (let [{:keys [mac-address network-number]} value]
-    (Address. network-number (clojure->bacnet :octet-string mac-address))))
+  (let [{:keys [mac-address network-number]} value
+        ;; Accept both hex strings and byte vectors for backward compatibility
+        mac-bytes (cond
+                    (string? mac-address) (mac-string->bytes mac-address)
+                    (coll? mac-address)   mac-address
+                    :else                 (throw (Exception.
+                                                   (str "mac-address must be a string or byte vector, got: "
+                                                        (type mac-address)))))]
+    (Address. network-number (clojure->bacnet :octet-string mac-bytes))))
 
 (defmethod bacnet->clojure Address
   [^Address o]
-  {:mac-address    (bacnet->clojure (.getMacAddress o))
+  {:mac-address    (-> o .getMacAddress .getBytes bytes->mac-string)
    :network-number (bacnet->clojure (.getNetworkNumber o))})
 
 
