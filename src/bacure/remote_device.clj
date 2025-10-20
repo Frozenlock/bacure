@@ -130,6 +130,103 @@
       (keys)
       (set)))
 
+(defn- mac-address->device-id
+  "Create a map of MAC addresses (human-readable strings) to device IDs for all known remote devices."
+  [local-device-id]
+  (->> (for [remote-id (remote-devices local-device-id)
+             :let [address (-> (rd local-device-id remote-id) .getAddress)
+                   mac-string (:mac-address (c/bacnet->clojure address))]]
+         [mac-string remote-id])
+       (into {})))
+
+(defn- get-network-routers
+  "Get the network routers map from the local device transport.
+  Returns a map of network-number to OctetString MAC address, or nil if none."
+  [local-device-id]
+  (some-> (ld/local-device-object local-device-id)
+          .getNetwork
+          .getTransport
+          .getNetworkRouters))
+
+(defn- build-router-info
+  "Convert an OctetString MAC address to router info map with device lookup.
+
+  Parameters:
+  - local-device-id: The local device ID
+  - network-number: The BACnet network number for this router
+  - mac-octet-string: The router's MAC address as an OctetString
+  - mac->device-id: Map of MAC address strings to device IDs (for device lookup)
+
+  Returns a map with :mac-address, :device-id, and :device-name."
+  [local-device-id network-number mac-octet-string mac->device-id]
+  (let [mac-address (:mac-address
+                      (c/bacnet->clojure
+                        (c/clojure->bacnet :address
+                          {:mac-address (vec (.getBytes mac-octet-string))
+                           :network-number network-number})))
+        device-id (get mac->device-id mac-address)]
+    {:mac-address mac-address
+     :device-id   device-id
+     :device-name (when device-id (.getName (rd local-device-id device-id)))}))
+
+(defnd network-router
+  "Returns information about a single network router by network number.
+
+  Returns a map with router information or nil if no router found:
+  {:mac-address \"192.168.1.1:47808\"
+   :device-id 1234
+   :device-name \"Router\"}"
+  [local-device-id network-number]
+  (when-let [routers (get-network-routers local-device-id)]
+    (when-let [mac-octet-string (get routers (int network-number))]
+      (build-router-info local-device-id
+                         network-number
+                         mac-octet-string
+                         (mac-address->device-id local-device-id)))))
+
+(defnd network-routers
+  "Returns information about all network routers discovered by the local device.
+  Returns a map of network-number to router information:
+  {network-number {:mac-address \"192.168.1.1:47808\"
+                   :device-id 1234
+                   :device-name \"Router\"}}"
+  [local-device-id]
+  (when-let [routers (get-network-routers local-device-id)]
+    (when-not (empty? routers)
+      (let [mac->device-id (mac-address->device-id local-device-id)]
+        (->> (for [[network-int mac-octet-string] routers]
+               [network-int (build-router-info local-device-id
+                                               network-int
+                                               mac-octet-string
+                                               mac->device-id)])
+             (into {}))))))
+
+(defnd routing-info
+  "Returns routing information for a remote device, including its address and router if on a remote network.
+
+  Returns a map with:
+  - :address - Device's own address {:mac-address \"192.168.1.115:47808\" :network-number 3}
+  - :routed-by - Router information {:mac-address \"...\" :device-id ... :device-name \"...\"} or nil if on local network
+  - :routes-to - List of network numbers this device routes (empty if device is not a router)
+
+  Example return value for remote device:
+  {:address {:mac-address \"192.168.1.115:47808\" :network-number 3}
+   :routed-by {:mac-address \"192.168.1.113:47808\" :device-id 1813 :device-name \"Router\"}
+   :routes-to ()}
+
+  For devices on the local network (network-number 0), :routed-by will be nil."
+  [local-device-id device-id]
+  (let [address (c/bacnet->clojure (.getAddress (rd local-device-id device-id)))
+        network-num (:network-number address 0)
+        routers (network-routers local-device-id)
+        routed-by (get routers network-num)
+        routes-to (for [[n-int m] routers
+                        :when (= (:device-id m) device-id)]
+                    n-int)]
+    {:address   address
+     :routed-by routed-by
+     :routes-to routes-to}))
+
 (defnd remote-devices-and-names
   "Return a list of vector pair with the device-id and its name.
    -->  ([1234 \"SimpleServer\"])"
