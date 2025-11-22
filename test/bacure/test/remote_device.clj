@@ -274,12 +274,11 @@
         (let [result (rd/routing-info ld-id rd-id)]
           (is (map? result))
           (is (contains? result :address))
-          (is (contains? result :routed-by))
+          ;; :routed-by key should be omitted for local devices
+          (is (not (contains? result :routed-by)))
           (let [address (:address result)]
             (is (= 0 (:network-number address)))
-            (is (string? (:mac-address address))))
-          ;; Router should be nil for local device
-          (is (nil? (:routed-by result)))))
+            (is (string? (:mac-address address))))))
 
       (testing "routing-info for device on remote network with known router"
         ;; Mock the device to be on network 5 with a known router
@@ -305,26 +304,30 @@
                 (is (= router-mac (:mac-address router)))
                 (is (= router-id (:device-id router)))
                 (is (= router-name (:device-name router))))))
-          (with-redefs [rd/network-routers (fn [_]
-                                             {;; Remote device is routing the following networks:
-                                              1 {:device-id rd-id}
-                                              2 {:device-id rd-id}
 
-                                              ;; Other unused routers
-                                              3 {:device-id (inc rd-id)}
-                                              4 {:device-id (inc rd-id)}})]
-            (let [result (rd/routing-info ld-id rd-id)]
-              (is (map? result))
-              (is (map? (:address result)))
-              (is (not (:routed-by result)))
-              (is (= [1 2] (:routes-to result)))))))
+      (testing "routing-info for device that routes to other networks"
+        ;; Device is on local network but acts as router to networks 1 and 2
+        (with-redefs [rd/network-routers (fn [_]
+                                           {;; Remote device is routing the following networks:
+                                            1 {:device-id rd-id}
+                                            2 {:device-id rd-id}
+
+                                            ;; Other unused routers
+                                            3 {:device-id (inc rd-id)}
+                                            4 {:device-id (inc rd-id)}})]
+          (let [result (rd/routing-info ld-id rd-id)]
+            (is (map? result))
+            (is (map? (:address result)))
+            ;; :routed-by should be omitted for local network device
+            (is (not (contains? result :routed-by)))
+            ;; :routes-to should show networks this device routes to
+            (is (= [1 2] (:routes-to result))))))))
 
       (testing "routing-info for device on remote network with unknown router"
         ;; Mock the device to be on network 10, but no router known for that network
         (let [remote-address {:mac-address "10.0.0.50:47808" :network-number 10}
               original-bacnet->clojure c/bacnet->clojure]
-          (with-redefs [rd/network-router (fn [_ network-num] nil)
-                        c/bacnet->clojure (fn [obj]
+          (with-redefs [c/bacnet->clojure (fn [obj]
                                              (if (instance? com.serotonin.bacnet4j.type.constructed.Address obj)
                                                remote-address
                                                (original-bacnet->clojure obj)))]

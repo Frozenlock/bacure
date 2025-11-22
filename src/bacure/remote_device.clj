@@ -206,15 +206,18 @@
 
   Returns a map with:
   - :address - Device's own address {:mac-address \"192.168.1.115:47808\" :network-number 3}
-  - :routed-by - Router information {:mac-address \"...\" :device-id ... :device-name \"...\"} or nil if on local network
-  - :routes-to - List of network numbers this device routes (empty if device is not a router)
+  - :routed-by - Router information {:mac-address \"...\" :device-id ... :device-name \"...\"} (omitted if on local network)
+  - :routes-to - List of network numbers this device routes to (omitted if device is not a router)
 
-  Example return value for remote device:
+  Keys with nil or empty values are omitted from the result.
+
+  Example return value for a device on a remote network:
   {:address {:mac-address \"192.168.1.115:47808\" :network-number 3}
-   :routed-by {:mac-address \"192.168.1.113:47808\" :device-id 1813 :device-name \"Router\"}
-   :routes-to ()}
+   :routed-by {:mac-address \"192.168.1.113:47808\" :device-id 1813 :device-name \"Router\"}}
 
-  For devices on the local network (network-number 0), :routed-by will be nil."
+  Example return value for a device on the local network that routes to networks 3 and 5:
+  {:address {:mac-address \"192.168.1.113:47808\" :network-number 0}
+   :routes-to (3 5)}"
   [local-device-id device-id]
   (let [address (c/bacnet->clojure (.getAddress (rd local-device-id device-id)))
         network-num (:network-number address 0)
@@ -223,9 +226,12 @@
         routes-to (for [[n-int m] routers
                         :when (= (:device-id m) device-id)]
                     n-int)]
-    {:address   address
-     :routed-by routed-by
-     :routes-to routes-to}))
+    (->> {:address   address
+          :routed-by routed-by
+          :routes-to routes-to}
+         (remove (fn [[k v]] (or (nil? v)
+                                 (and (coll? v) (empty? v)))))
+         (into {}))))
 
 (defnd remote-devices-and-names
   "Return a list of vector pair with the device-id and its name.
