@@ -52,14 +52,14 @@
       ;; any other error
       (state/set-request-response! bacnet-exception)
       (deliver return-promise
-        (condp = (class bacnet-exception)
-          ServiceTooBigException {:error {:error-reason :service-too-big}}
+               (condp = (class bacnet-exception)
+                 ServiceTooBigException {:error {:error-reason :service-too-big}}
 
           ;; else
-          (try (some-> (.getBacnetError bacnet-exception)
-                       (c/bacnet->clojure))
-               (catch Exception e
-                 {:error {:raw-exception bacnet-exception}})))))))
+                 (try (some-> (.getBacnetError bacnet-exception)
+                              (c/bacnet->clojure))
+                      (catch Exception e
+                        {:error {:raw-exception bacnet-exception}})))))))
 
 (defn send-request-promise
   "Send the request to the remote device.
@@ -80,13 +80,17 @@
                                           (get device-id))
                                   request
                                   (make-response-consumer return-promise))
-                           (throw (Exception. "Can't send request while the device isn't initialized.")))]
-     ;; bacnet4j seems a little icky when dealing with timeouts...
-     ;; better handling it ourself.
-     (future (do (Thread/sleep (+ timeout 1000))
-                 (deliver return-promise {:timeout (str "The device "device-id " didn't respond in time.")})))
-     (try @return-promise
-          (catch Exception e (log/error (.getMessage e)))))))
+                           (throw (Exception. "Can't send request while the device isn't initialized.")))
+         ;; bacnet4j seems a little icky when dealing with timeouts...
+         ;; better handling it ourself.
+         timeout-future (future
+                          (Thread/sleep (+ timeout 1000))
+                          (deliver return-promise {:timeout (str "The device " device-id " didn't respond in time.")}))]
+     (try
+       (let [result @return-promise]
+         (future-cancel timeout-future)
+         result)
+       (catch Exception e (log/error (.getMessage e)))))))
 
 (defn send-who-is
   [local-device-id {:keys [min-range max-range]

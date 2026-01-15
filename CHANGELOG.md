@@ -1,5 +1,6 @@
 # Changelog
 ## Unreleased
+- Fix thread leak in `send-request-promise`: cancel timeout future when response arrives.
 
 ## [1.2.1] - 2024-02-18
 - Fix lazyness bug in `discover-network`: was sending multiple `Who-Is` simultaneously.
