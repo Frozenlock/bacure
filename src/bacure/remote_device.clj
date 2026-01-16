@@ -46,7 +46,6 @@
   (-> (.getSegmentationSupported (rd local-device-id device-id))
       c/bacnet->clojure))
 
-
 (def ^:private extended-information-properties
   [:protocol-services-supported
    :object-name
@@ -160,10 +159,10 @@
   Returns a map with :mac-address, :device-id, and :device-name."
   [local-device-id network-number mac-octet-string mac->device-id]
   (let [mac-address (:mac-address
-                      (c/bacnet->clojure
-                        (c/clojure->bacnet :address
-                          {:mac-address (vec (.getBytes mac-octet-string))
-                           :network-number network-number})))
+                     (c/bacnet->clojure
+                      (c/clojure->bacnet :address
+                                         {:mac-address (vec (.getBytes mac-octet-string))
+                                          :network-number network-number})))
         device-id (get mac->device-id mac-address)]
     {:mac-address mac-address
      :device-id   device-id
@@ -237,8 +236,8 @@
   "Return a list of vector pair with the device-id and its name.
    -->  ([1234 \"SimpleServer\"])"
   [local-device-id]
-  (for [d (remote-devices)]
-    [d (.getName (rd d))]))
+  (for [d (remote-devices local-device-id)]
+    [d (.getName (rd local-device-id d))]))
 
 (defnd all-extended-information
   "Make sure we have the extended information of every known
@@ -323,7 +322,6 @@
                                {:min-range remote-device-id
                                 :max-range remote-device-id}))))
 
-
 (defn- find-remote-devices-and-extended-information
   "Sends a WhoIs. For every device discovered,
   get its extended information. Return the remote devices as a list."
@@ -336,7 +334,6 @@
    (find-remote-devices local-device-id args)
    (all-extended-information local-device-id)
    (remote-devices local-device-id)))
-
 
 ;; Warning : using `defnd` with `discover-network` would be a breaking
 ;; change. (Currently the single arity is to specify the
@@ -357,7 +354,6 @@
          (if (not-empty ids)
            ids
            (recur (dec remaining-tries))))))))
-
 
 (defnd create-remote-object!
   "Send a 'create object request' to the remote device. Must be given
@@ -384,7 +380,6 @@
   (let [request (DeleteObjectRequest. (c/clojure->bacnet :object-identifier object-identifier))]
     (services/send-request-promise local-device-id device-id request)))
 
-
 (defn advanced-property
   "Take a property and wrap it inside a map with the priority and
   property-array-index."
@@ -394,7 +389,6 @@
      :priority priority
      :property-array-index property-array-index}
     property-value))
-
 
 (defnd set-remote-property!
   "Set the given remote object property.
@@ -459,7 +453,7 @@
   If the remote device doesn't support 'write-property-multiple',
   fallback to writing all properties individually."
   [local-device-id device-id write-access-specifications]
-  (if (-> (services-supported device-id) :write-property-multiple)
+  (if (-> (services-supported local-device-id device-id) :write-property-multiple)
     ;; normal behavior
     (write-property-multiple local-device-id device-id write-access-specifications)
     ;; fallback to writing properties individually
@@ -476,8 +470,6 @@
                          device-id
                          [[[:device device-id] :system-status]])
      (catch Exception e nil))))
-
-
 
 ;; ================================================================
 ;; Test helpers

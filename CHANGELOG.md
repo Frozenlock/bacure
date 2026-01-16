@@ -1,6 +1,7 @@
 # Changelog
 ## Unreleased
 - Fix thread leak in `send-request-promise`: cancel timeout future when response arrives.
+- Fix `local-device-id` not passed to inner function calls in `remote-devices-and-names`, `remote-objects-all-properties`, `read-trend-log`, and `set-remote-properties!`.
 
 ## [1.2.1] - 2024-02-18
 - Fix lazyness bug in `discover-network`: was sending multiple `Who-Is` simultaneously.

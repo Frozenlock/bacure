@@ -11,7 +11,6 @@
            [com.serotonin.bacnet4j.service.unconfirmed WhoHasRequest WhoHasRequest$Limits WhoIsRequest]))
 
 (comment :bacure.coerce.service.confirmed/side-effect)
-(comment :bacure.coerce.service.confirmed/side-effect)
 
 ;;; bacnet4j introduced some kind of callbacks with the
 ;;; request-sending mechanism. For simplicity sake, we use promises to
@@ -65,7 +64,7 @@
   "Send the request to the remote device.
   The possible return values are :
 
-  {:success <expected valuezs - if any>
+  {:success <expected values - if any>
    :error {:error-class ..., :error-code ...}}
 
   Will block until the remote device answers."
@@ -90,7 +89,10 @@
        (let [result @return-promise]
          (future-cancel timeout-future)
          result)
-       (catch Exception e (log/error (.getMessage e)))))))
+       (catch Exception e
+         (log/error (.getMessage e))
+         {:error {:error-reason :exception
+                  :message (.getMessage e)}})))))
 
 (defn send-who-is
   [local-device-id {:keys [min-range max-range]

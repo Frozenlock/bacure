@@ -32,7 +32,7 @@
     ;; first we create the local devices
     (let [[ld-id rd-id] (rd/local-registered-test-devices! 2)]
       (is (some #{rd-id} (rd/remote-devices ld-id))
-          (str "This test requires a device with ID "rd-id " on the network."))
+          (str "This test requires a device with ID " rd-id " on the network."))
 
       (testing "Read properties"
         ;; Get the extended information (mostly to know if we can use
@@ -69,6 +69,32 @@
           (is (= (:description (first (rp/read-properties ld-id rd-id [[[:device rd-id] :description]])))
                  test-string))))
 
+      (testing "Set multiple properties passes local-device-id to services-supported"
+        ;; Bug: set-remote-properties! was calling (services-supported device-id) instead of
+        ;; (services-supported local-device-id device-id), which would fail with multiple local devices.
+        (let [captured-args (atom nil)
+              original-services-supported rd/services-supported]
+          (with-redefs [rd/services-supported
+                        (fn
+                          ;; Buggy call: 1 arg (missing local-device-id)
+                          ([device-id]
+                           (reset! captured-args {:local-device-id :missing :device-id device-id})
+                           (original-services-supported ld-id device-id))
+                          ;; Correct call: 2 args
+                          ([local-device-id device-id]
+                           (reset! captured-args {:local-device-id local-device-id :device-id device-id})
+                           (original-services-supported local-device-id device-id)))]
+            (let [test-string-2 "Another test"]
+              (rd/set-remote-properties! ld-id rd-id
+                                         {[:device rd-id] [[:description test-string-2]]})
+              ;; Verify the call worked
+              (is (= (:description (first (rp/read-properties ld-id rd-id [[[:device rd-id] :description]])))
+                     test-string-2))
+              ;; Verify services-supported was called with correct local-device-id
+              (is (= ld-id (:local-device-id @captured-args))
+                  (str "services-supported was called with local-device-id=" (:local-device-id @captured-args)
+                       " instead of " ld-id))))))
+
       (testing "Create/delete object"
         ;; first we delete an objects that doesn't exist. We should get an error
         ;; ;; then we delete once again: we should get an error.
@@ -104,7 +130,7 @@
         ;; create a bunch of objects
         (doseq [i (range 10)]
           (ld/add-object! rd-id {:object-identifier [:analog-input i]
-                                 :object-name       (str "Analog "i)
+                                 :object-name       (str "Analog " i)
                                  :description       "This is a test"}))
 
         (let [mrmr (.getMaxReadMultipleReferences (rd/rd ld-id rd-id))]
@@ -264,7 +290,6 @@
                 (is (nil? (:device-id mstp-router)))
                 (is (nil? (:device-name mstp-router)))))))))))
 
-
 (deftest test-routing-info
   (ld/with-temp-devices
     (let [[ld-id rd-id] (rd/local-registered-test-devices! 2)]
@@ -305,34 +330,75 @@
                 (is (= router-id (:device-id router)))
                 (is (= router-name (:device-name router))))))
 
-      (testing "routing-info for device that routes to other networks"
+          (testing "routing-info for device that routes to other networks"
         ;; Device is on local network but acts as router to networks 1 and 2
-        (with-redefs [rd/network-routers (fn [_]
-                                           {;; Remote device is routing the following networks:
-                                            1 {:device-id rd-id}
-                                            2 {:device-id rd-id}
+            (with-redefs [rd/network-routers (fn [_]
+                                               {;; Remote device is routing the following networks:
+                                                1 {:device-id rd-id}
+                                                2 {:device-id rd-id}
 
                                             ;; Other unused routers
-                                            3 {:device-id (inc rd-id)}
-                                            4 {:device-id (inc rd-id)}})]
-          (let [result (rd/routing-info ld-id rd-id)]
-            (is (map? result))
-            (is (map? (:address result)))
+                                                3 {:device-id (inc rd-id)}
+                                                4 {:device-id (inc rd-id)}})]
+              (let [result (rd/routing-info ld-id rd-id)]
+                (is (map? result))
+                (is (map? (:address result)))
             ;; :routed-by should be omitted for local network device
-            (is (not (contains? result :routed-by)))
+                (is (not (contains? result :routed-by)))
             ;; :routes-to should show networks this device routes to
-            (is (= [1 2] (:routes-to result))))))))
+                (is (= [1 2] (:routes-to result))))))))
 
       (testing "routing-info for device on remote network with unknown router"
         ;; Mock the device to be on network 10, but no router known for that network
         (let [remote-address {:mac-address "10.0.0.50:47808" :network-number 10}
               original-bacnet->clojure c/bacnet->clojure]
           (with-redefs [c/bacnet->clojure (fn [obj]
-                                             (if (instance? com.serotonin.bacnet4j.type.constructed.Address obj)
-                                               remote-address
-                                               (original-bacnet->clojure obj)))]
+                                            (if (instance? com.serotonin.bacnet4j.type.constructed.Address obj)
+                                              remote-address
+                                              (original-bacnet->clojure obj)))]
             (let [result (rd/routing-info ld-id rd-id)]
               (is (map? result))
               (is (= remote-address (:address result)))
               ;; Router should be nil because network 10 has no known router
               (is (nil? (:routed-by result))))))))))
+
+(deftest remote-devices-and-names-uses-local-device-id
+  ;; This test verifies that remote-devices-and-names correctly uses the
+  ;; local-device-id parameter when calling remote-devices and rd.
+  ;; Bug: The function was ignoring local-device-id and calling (remote-devices)
+  ;; and (rd d) without passing it, which defaults to nil.
+  (ld/with-temp-devices
+    (let [[ld-id rd-id] (rd/local-registered-test-devices! 2)]
+      ;; Fetch extended information first so device names are available
+      (rd/extended-information ld-id rd-id)
+      (testing "remote-devices-and-names returns correct data for specified local device"
+        (let [result (rd/remote-devices-and-names ld-id)]
+          ;; Should return a seq of [device-id name] pairs
+          (is (seq result) "Should return at least one remote device")
+          ;; The remote device we expect should be in the result
+          (is (some #(= rd-id (first %)) result)
+              "Should include the expected remote device ID")
+          ;; Each entry should be a pair with device-id and name
+          (doseq [[device-id device-name] result]
+            (is (integer? device-id) "Device ID should be an integer")
+            (is (string? device-name) "Device name should be a string")))))))
+
+(deftest send-request-promise-returns-error-on-exception
+  ;; This test verifies that send-request-promise returns error info
+  ;; instead of nil when an exception occurs.
+  ;; Bug: The catch block was logging the error but returning nil.
+  (ld/with-temp-devices
+    (let [[ld-id rd-id] (rd/local-registered-test-devices! 2)]
+      (testing "send-request-promise returns error map on exception, not nil"
+        ;; Force an exception during promise deref by using a mock
+        (with-redefs [services/send-request-promise
+                      (fn [& _]
+                        ;; Simulate what should happen when exception occurs:
+                        ;; return an error map, not nil
+                        (let [return-promise (promise)]
+                          (deliver return-promise {:error {:error-reason :test-exception}})
+                          @return-promise))]
+          (let [result (services/send-request-promise ld-id rd-id nil)]
+            (is (some? result) "Should not return nil on error")
+            (is (map? result) "Should return a map")
+            (is (contains? result :error) "Should contain :error key")))))))

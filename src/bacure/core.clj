@@ -21,7 +21,6 @@
      (future (rd/discover-network device-id))
      device-id)))
 
-
 (defn find-bacnet-port
   "Scan ports to see if any BACnet device will respond. Use port
   numbers as device-id.
@@ -67,7 +66,6 @@
               (map deref)
               (remove nil?)))))))
 
-
 ;; ================================================================
 ;; Remote objects related functions
 ;; ================================================================
@@ -83,11 +81,10 @@
    You probably want to use `remote-object-properties'."
   ([device-id object-identifiers properties]
    (remote-object-properties-with-error nil device-id object-identifiers properties))
-  ([local-device-id device-id object-identifiers properties]   
-   (let [object-identifiers ((fn[x] (if ((comp coll? first) x) x [x])) object-identifiers)
+  ([local-device-id device-id object-identifiers properties]
+   (let [object-identifiers ((fn [x] (if ((comp coll? first) x) x [x])) object-identifiers)
          properties ((fn [x] (if (coll? x) x [x])) properties)]
      (rp/read-properties-multiple-objects local-device-id device-id object-identifiers properties))))
-
 
 (defn remote-object-properties
   "Query a remote device and return the properties values
@@ -117,12 +114,11 @@
    (-> (remote-object-properties local-device-id device-id [:device device-id] :object-list)
        ((comp :object-list first)))))
 
-
 (defn remote-objects-all-properties
   "Return a list of maps of every objects and their properties."
   ([device-id] (remote-objects-all-properties nil device-id))
   ([local-device-id device-id]
-   (remote-object-properties device-id (remote-objects device-id) :all)))
+   (remote-object-properties local-device-id device-id (remote-objects local-device-id device-id) :all)))
 
 (defn get-device-id
   "Return the device-id from a device-map (bunch of properties).
@@ -133,7 +129,6 @@
   (->> (map :object-identifier device-map)
        (filter (comp #{:device} first))
        ((comp second first))))
-
 
 (defn read-trend-log
   "A convenience function to retrieve all data from a trend-log (even the log-buffer).
@@ -146,9 +141,9 @@
        [\"2009-03-01T07:30:00.000Z\" 1010.0]...]...}"
   ([device-id object-identifier] (read-trend-log nil device-id object-identifier))
   ([local-device-id device-id object-identifier]
-   (let [properties (first (remote-object-properties device-id object-identifier :all))
+   (let [properties (first (remote-object-properties local-device-id device-id object-identifier :all))
          record-count (:record-count properties)]
-     (merge (:success (rp/read-range local-device-id device-id object-identifier 
+     (merge (:success (rp/read-range local-device-id device-id object-identifier
                                      :log-buffer nil [1 record-count]))
             properties))))
 
@@ -158,19 +153,19 @@
 
 (defn- where*
   [criteria not-found-result]
-    (fn [m]
-      (every? (fn [[k v]]
-                (let [tested-value (get m k :not-found)]
-                  (cond
-                   (= tested-value :not-found) not-found-result
-                   (and (fn? v) tested-value) (try (v tested-value)
-                                                   (catch Exception e))
+  (fn [m]
+    (every? (fn [[k v]]
+              (let [tested-value (get m k :not-found)]
+                (cond
+                  (= tested-value :not-found) not-found-result
+                  (and (fn? v) tested-value) (try (v tested-value)
+                                                  (catch Exception e))
                    ;; catch exception if there's an error on the provided testing function
                    ;; (for example, if we use '>' on a string)
-                   (number? tested-value) (== tested-value v)
-                   (and (= (class v) java.util.regex.Pattern)
-                        (string? tested-value)) (re-find v tested-value)
-                   (= tested-value v) :pass))) criteria)))
+                  (number? tested-value) (== tested-value v)
+                  (and (= (class v) java.util.regex.Pattern)
+                       (string? tested-value)) (re-find v tested-value)
+                  (= tested-value v) :pass))) criteria)))
 
 (defn where
   "Will test with criteria map as a predicate. If the value of a
@@ -184,7 +179,6 @@
                {:a nil :b \"foo\"} fail"
   [criteria]
   (where* criteria false))
-
 
 (defn where-or-not-found
   "Will test with criteria map as a predicate. If the value of a
@@ -203,13 +197,12 @@
   "Return the objects-maps with the new property added."
   [device-id objects-maps property]
   (->> (remote-object-properties-with-error
-         device-id (map :object-identifier objects-maps) property)
+        device-id (map :object-identifier objects-maps) property)
        (concat objects-maps)
        (group-by :object-identifier)
        vals
        (map #(apply merge %))))
 
-  
 (defn find-objects
   "Return a list of objects-maps (properties) matching the criteria-map.
 
@@ -230,19 +223,18 @@
      `description' property for 3 different objects would be merged
      into a single request."
   ([device-id criteria-map]
-     (find-objects device-id criteria-map (remote-objects device-id)))
+   (find-objects device-id criteria-map (remote-objects device-id)))
   ([device-id criteria-map object-identifiers]
-     (let [properties (keys criteria-map)
-           object-identifiers (or object-identifiers (remote-objects device-id))
-           init-map (map #(hash-map :object-identifier %) object-identifiers)
-           update-and-filter
-           (fn [m p]
-             (when-let [updated-object-map (update-objects-maps device-id m p)]
-               (filter (where-or-not-found criteria-map) updated-object-map)))]
-       (reduce update-and-filter
-               init-map
-               properties))))
-
+   (let [properties (keys criteria-map)
+         object-identifiers (or object-identifiers (remote-objects device-id))
+         init-map (map #(hash-map :object-identifier %) object-identifiers)
+         update-and-filter
+         (fn [m p]
+           (when-let [updated-object-map (update-objects-maps device-id m p)]
+             (filter (where-or-not-found criteria-map) updated-object-map)))]
+     (reduce update-and-filter
+             init-map
+             properties))))
 
 (defn find-objects-everywhere
   "Same as `find-objects', but will search every known devices on the network.
@@ -261,12 +253,12 @@
    All remote devices are queried simultaneously (or as much as the
    local-device can allow)."
   ([criteria-map]
-     (find-objects-everywhere criteria-map nil))
+   (find-objects-everywhere criteria-map nil))
   ([criteria-map object-identifiers]
-     (letfn [(f [device]
-               (-> (find-objects device criteria-map object-identifiers)
-                   ((fn [x] (when (seq x)
-                              [[:device device] x])))))]
-       (->> (rd/remote-devices)
-            (pmap f) ;; parallel powaaaa
-            (into {})))))
+   (letfn [(f [device]
+             (-> (find-objects device criteria-map object-identifiers)
+                 ((fn [x] (when (seq x)
+                            [[:device device] x])))))]
+     (->> (rd/remote-devices)
+          (pmap f) ;; parallel powaaaa
+          (into {})))))
