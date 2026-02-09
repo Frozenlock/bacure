@@ -1,5 +1,7 @@
 # Changelog
 ## Unreleased
+
+## [1.3.2] - 2026-02-09
 - Fix thread leak in `send-request-promise`: cancel timeout future when response arrives.
 - Fix `local-device-id` not passed to inner function calls in `remote-devices-and-names`, `remote-objects-all-properties`, `read-trend-log`, and `set-remote-properties!`.
 
