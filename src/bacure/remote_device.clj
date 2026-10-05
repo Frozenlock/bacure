@@ -7,6 +7,7 @@
             [bacure.services :as services]
             [bacure.state :as state]
             [bacure.util :as util :refer [defnd]]
+            [clojure.tools.logging :as log]
             [com.climate.claypoole :as claypoole])
   (:import (com.serotonin.bacnet4j RemoteDevice
                                    event.DeviceEventAdapter
@@ -61,65 +62,280 @@
                       (c/clojure->bacnet :property-identifier property-identifier)
                       (obj/encode-property-value :device property-identifier value)))
 
+(defn- device-extended-information
+  "Return the extended information stored in the RemoteDevice object.
+  Nil if we have nothing."
+  [device]
+  (some->> (for [p-id extended-information-properties
+                 :let [value (get-device-property device p-id)]
+                 :when value]
+             [p-id value])
+           (seq)
+           (into {})))
+
+(defn- complete-extended-information?
+  "The extended information is complete when we know how to talk to
+  the device (services supported) and what it is (object-name)."
+  [info]
+  (boolean (and (:protocol-services-supported info)
+                (:object-name info))))
+
 (defnd cached-extended-information
-  "Return the cached remote device extended information. Nil if we have nothing."
+  "Return the cached remote device extended information. Nil if we have nothing.
+
+  Might be partial (for example the services supported without the
+  object-name) if the device stopped answering midway."
   [local-device-id device-id]
-  (when-let [device (rd local-device-id device-id)]
-    ;; we got the 'extended info' when we have the services supported.
-    (some->> (for [p-id extended-information-properties
-                   :let [value (get-device-property device p-id)]
-                   :when value]
-               [p-id value])
-             (seq)
-             (into {}))))
+  (some-> (rd local-device-id device-id)
+          (device-extended-information)))
+
+(defn- fetch-extended-information!
+  "Send the requests to the remote device and store the results in
+  its RemoteDevice object.
+
+  By default, only ask for what we don't already have. With
+  'refresh?', ask for everything again.
+
+  Return the extended information we have for the device (might be
+  incomplete), or nil if we don't know its services."
+  [local-device-id device-id dev refresh?]
+  ;; first step is to see if the device support read-property-multiple to enable faster read
+  (let [known-services (when-not refresh?
+                         (get-device-property dev :protocol-services-supported))
+        services       (or known-services
+                           (-> (rp/read-individually local-device-id device-id [[[:device device-id]
+                                                                                 :protocol-services-supported]])
+                               (first)
+                               (:protocol-services-supported)))]
+    ;; don't do anything else if we can't get the protocol supported
+    (when (and services (not (:error services)))
+      (when-not known-services
+        (set-device-property! dev :protocol-services-supported services))
+      ;; then we can query for more info
+      (let [properties (cond->> (remove #{:protocol-services-supported} extended-information-properties)
+                         (not refresh?) (remove #(get-device-property dev %)))]
+        (when (seq properties)
+          (let [result (first (rp/read-properties local-device-id device-id
+                                                  [(into [[:device device-id]] properties)]))]
+            (doseq [[k v] result]
+              (when-not (:error v)
+                (set-device-property! dev k v))))))
+      (device-extended-information dev))))
+
+(defn- extended-information-retry-ms
+  "How long to wait before automatically asking again a device that
+  failed 'failures-count' times in a row."
+  [local-device failures-count]
+  (let [config  (fn [k] (or (get-in local-device [:init-configs k])
+                            (get ld/default-configs k)))]
+    (min (config :extended-information-max-retry-ms)
+         (* (config :extended-information-retry-ms) failures-count))))
+
+(defn- recently-failed?
+  "True if we recently failed to fetch the extended information of
+  this device. 'local-device' is the local device state (map)."
+  [local-device device-id now]
+  (when-let [{:keys [at count]} (get-in local-device [::ext-info-failures device-id])]
+    (< (- now at)
+       (extended-information-retry-ms local-device count))))
+
+(defn- claim-fetch
+  "Pure function of the local device state. Try to associate
+  'new-claim' ({:promise ... :device ...}) with the remote device.
+
+  The claim is not taken if:
+  - the remote device object is no longer the one in the cache (the
+    local device was reset, or the cache was cleared);
+  - there's already a fetch in flight for this same object;
+  - 'automatic?' and the device recently failed to answer."
+  [local-device device-id {dev :device :as new-claim} automatic? now]
+  (let [claim (get-in local-device [::ext-info-fetch device-id])]
+    (cond
+      (not (identical? dev (get-in local-device [:remote-devices device-id]))) local-device
+      (and claim (identical? dev (:device claim))) local-device
+      (and automatic? (recently-failed? local-device device-id now)) local-device
+      :else (assoc-in local-device [::ext-info-fetch device-id] new-claim))))
+
+(defn- record-fetch-outcome
+  "Pure function of the local device state. Remember if we failed to
+  get the complete extended information, unless the remote device
+  object is no longer the one in the cache."
+  [local-device device-id dev success? now]
+  (if (identical? dev (get-in local-device [:remote-devices device-id]))
+    (update-in local-device [::ext-info-failures device-id]
+               (fn [failures]
+                 (when-not success?
+                   {:at now :count (inc (:count failures 0))})))
+    local-device))
+
+(defn- fetch-role
+  "Pure function of the local device state, as it is right after
+  `claim-fetch`. What should the caller holding 'dev' and 'new-claim' do?
+
+  :replaced    - 'dev' is no longer the cached object: start over;
+  :owner       - we got the claim: fetch;
+  :waiter      - a fetch is in flight for this same object: wait for it;
+  :not-allowed - nothing to do right now (recently failed)."
+  [local-device device-id dev new-claim]
+  (let [claim (get-in local-device [::ext-info-fetch device-id])]
+    (cond
+      ;; This must come first: the claim of a fetch for an object that
+      ;; was replaced meanwhile might still be there.
+      (not (identical? dev (get-in local-device [:remote-devices device-id]))) :replaced
+      (identical? claim new-claim) :owner
+      (and claim (identical? dev (:device claim))) :waiter
+      :else :not-allowed)))
+
+(defn- retrieve-extended-information!*
+  "Only one fetch is in flight per remote device: concurrent callers
+  wait for it and share its result.
+
+  Options:
+  :refresh?   - ask for everything again, not only what's missing;
+  :automatic? - nobody asked for it: do nothing if the device recently
+                failed to answer.
+
+  Return the extended information (might be incomplete), or nil."
+  [local-device-id device-id {:keys [refresh? automatic?] :as options}]
+  (loop [tries 3]
+    (when-let [dev (rd local-device-id device-id)]
+      (let [fetch-ks  [::ext-info-fetch device-id]
+            new-claim {:promise (promise) :device dev}
+            ;; In a single atomic step: check that 'dev' is still the
+            ;; cached object and take the claim.
+            local-device (state/update-in-local-device! local-device-id []
+                                                        claim-fetch device-id new-claim automatic?
+                                                        (System/currentTimeMillis))]
+        (case (fetch-role local-device device-id dev new-claim)
+          :owner
+          (let [p (:promise new-claim)]
+            (try
+              (let [[result exception] (try [(fetch-extended-information! local-device-id device-id dev refresh?) nil]
+                                            (catch Exception e [nil e]))
+                    local-device (state/update-in-local-device! local-device-id []
+                                                                record-fetch-outcome device-id dev
+                                                                (complete-extended-information? result)
+                                                                (System/currentTimeMillis))
+                    current-dev  (get-in local-device [:remote-devices device-id])]
+                (if (identical? dev current-dev)
+                  (do (deliver p result)
+                      (when exception (throw exception))
+                      result)
+                  ;; 'dev' was replaced while we were fetching: what we
+                  ;; got is about an object nobody uses anymore. Give
+                  ;; what we know about the current one instead.
+                  (let [result (some-> current-dev device-extended-information)]
+                    (deliver p result)
+                    result)))
+              (finally
+                (deliver p nil) ; no-op if already delivered
+                ;; Release our claim, and only ours.
+                (state/update-in-local-device! local-device-id fetch-ks
+                                               #(when-not (identical? % new-claim) %)))))
+
+          :waiter
+          (deref (get-in local-device (conj fetch-ks :promise)) (* 10 60 1000) nil)
+
+          :replaced
+          (when (> tries 1) (recur (dec tries)))
+
+          :not-allowed
+          (log/debug (str "Device " device-id " recently failed to give its extended "
+                          "information; not asking again yet.")))))))
 
 (defnd retrieve-extended-information!
-  "Retrieve the remote device extended information (name, segmentation,
-  property multiple, etc..) and update it locally.
+  "Ask the remote device for its extended information (name,
+  segmentation, property multiple, etc..) and update it locally, even
+  if we already have it.
 
-  Return the cached extended information or nil if it couldn't be retrieved."
+  Only one fetch is in flight per device: concurrent callers wait for
+  it and share its result.
+
+  Return the extended information (might be incomplete if the device
+  stopped answering midway), or nil if it couldn't be retrieved."
   [local-device-id device-id]
-  (when-not (state/get-in-local-device local-device-id [::ext-info device-id])
-    (when-let [dev (rd local-device-id device-id)]
-      (try
-        ;; Avoid simultaneous extended-info fetches
-        (state/assoc-in-local-device! local-device-id [::ext-info device-id] :fetching)
+  (retrieve-extended-information!* local-device-id device-id {:refresh? true}))
 
-        ;; first step is to see if the device support read-property-multiple to enable faster read
-        (let [services ;; don't do anything else if we can't get the protocol supported
-              (-> (rp/read-individually local-device-id device-id [[[:device device-id]
-                                                                    :protocol-services-supported]])
-                  (first)
-                  (:protocol-services-supported))]
-          (when-not (:error services)
-            (set-device-property! dev :protocol-services-supported services)
-            ;; then we can query for more info
-            (let [remaining-properties (remove #{:protocol-services-supported} extended-information-properties)
-                  result               (first (rp/read-properties local-device-id device-id
-                                                                  [[[:device device-id] :object-name
-                                                                    :protocol-version :protocol-revision]]))]
-              (doseq [[k v] result]
-                (when-not (:error v)
-                  (set-device-property! dev k v))))
-            (cached-extended-information local-device-id device-id)))
-        (finally
-          (state/assoc-in-local-device! local-device-id [::ext-info device-id] nil))))))
+(defn- complete-extended-information!
+  "Return the extended information we have for the device, after
+  trying to get what is missing. Throws only if we end up with
+  nothing at all."
+  [local-device-id device-id options]
+  (let [[result exception] (try [(retrieve-extended-information!* local-device-id device-id options) nil]
+                                (catch Exception e [nil e]))]
+    (or result
+        ;; whatever we have, including what we just learned
+        (cached-extended-information local-device-id device-id)
+        (when exception (throw exception)))))
 
 (defnd extended-information
   "Return the device extended information that we have cached locally,
-  or request it directly to the remote device."
+  or request it directly to the remote device.
+
+  If the cached information is incomplete, try to complete it; if
+  that fails, return what we have."
   [local-device-id device-id]
-  (or (cached-extended-information local-device-id device-id)
-      (retrieve-extended-information! local-device-id device-id)))
+  (let [cached (cached-extended-information local-device-id device-id)]
+    (if (complete-extended-information? cached)
+      cached
+      (complete-extended-information! local-device-id device-id nil))))
+
+(defn auto-fetch-filter
+  "Return the current auto-fetch filter, if any. See `set-auto-fetch-filter!`."
+  ([] (auto-fetch-filter nil))
+  ([local-device-id]
+   (state/get-in-local-device local-device-id [:runtime-options :auto-fetch-filter])))
+
+(defn set-auto-fetch-filter!
+  "Set (or remove, with nil) the function deciding for which remote
+  devices we automatically fetch the extended information.
+
+  'f' takes a remote device ID and returns true if we are interested
+  in this device. It is called for every I-Am received: keep it fast.
+
+  The filter only applies to what bacure does on its own (when an
+  I-Am is received and during the network discovery of `boot-up!`).
+  Filtered devices are still listed in the remote devices, and
+  explicit calls such as `extended-information` or `discover-network`
+  are not affected.
+
+  The filter survives a reset of the local device. It can also be
+  given to `bacure.core/boot-up!`."
+  ([f] (set-auto-fetch-filter! nil f))
+  ([local-device-id f]
+   (state/update-in-local-device! local-device-id [:runtime-options :auto-fetch-filter]
+                                  (constantly f))
+   f))
+
+(defn- auto-fetch-extended-information!
+  "Fetch the extended information of a remote device, as something we
+  do on our own (nobody asked for it). Do nothing if:
+  - we already have it;
+  - the auto-fetch filter rejects the device;
+  - the device recently failed to answer.
+
+  Never throws."
+  [local-device-id device-id]
+  (try
+    (when-not (complete-extended-information?
+               (cached-extended-information local-device-id device-id))
+      (let [interested? (or (auto-fetch-filter local-device-id) (constantly true))]
+        (when (interested? device-id)
+          (complete-extended-information! local-device-id device-id {:automatic? true}))))
+    (catch Exception e)))
 
 (defn IAm-received-auto-fetch-extended-information
-  "Listen to IAm and try to fetch extended-information."
+  "Listen to IAm and try to fetch extended-information.
+
+  As this is something we do on our own, it is restricted by the
+  auto-fetch filter (see `set-auto-fetch-filter!`) and a device that
+  didn't answer is not asked again right away
+  (see :extended-information-retry-ms in the local device configs).
+  Explicit calls to `extended-information` are not restricted."
   [local-device-id]
   (proxy [DeviceEventAdapter] []
     (iAmReceived [remote-device]
-      (let [r-id (.getInstanceNumber remote-device)]
-        (try (extended-information local-device-id r-id)
-             (catch Exception e))))))
+      (auto-fetch-extended-information! local-device-id (.getInstanceNumber remote-device)))))
 
 (defnd remote-devices
   "Return the list of the current remote devices. These devices must
@@ -256,6 +472,17 @@
                            (catch Exception e))
                      (remote-devices local-device-id))))
 
+(defn- auto-fetch-all-extended-information
+  "Same as `all-extended-information`, but as something we do on our
+  own: restricted by the auto-fetch filter and the retry delays."
+  [local-device-id]
+  (let [pool (some-> (ld/get-local-device local-device-id)
+                     :-threadpool
+                     (claypoole/with-priority 1))]
+    (claypoole/upmap pool
+                     #(auto-fetch-extended-information! local-device-id %)
+                     (remote-devices local-device-id))))
+
 (defn- remote-object-matches?
   [[object-identifier remote-object] object-identifier-or-name]
   (or (= object-identifier object-identifier-or-name)
@@ -330,9 +557,11 @@
   ([{:keys [min-range max-range dest-port] :as args}]
    (find-remote-devices-and-extended-information nil args))
 
-  ([local-device-id {:keys [min-range max-range dest-port] :as args}]
+  ([local-device-id {:keys [min-range max-range dest-port automatic?] :as args}]
    (find-remote-devices local-device-id args)
-   (all-extended-information local-device-id)
+   (if automatic?
+     (auto-fetch-all-extended-information local-device-id)
+     (all-extended-information local-device-id))
    (remote-devices local-device-id)))
 
 ;; Warning : using `defnd` with `discover-network` would be a breaking
@@ -344,13 +573,20 @@
    remote-devices.
 
    Should be called in a future call to avoid `hanging' the program
-   while waiting for the remote devices to answer."
+   while waiting for the remote devices to answer.
+
+   Options:
+   :automatic? - The discovery is not an explicit request from a
+                 user: only fetch the extended information allowed by
+                 the auto-fetch filter (see `set-auto-fetch-filter!`)."
   ([] (discover-network nil))
   ([local-device-id] (discover-network local-device-id 5))
-  ([local-device-id tries]
+  ([local-device-id tries] (discover-network local-device-id tries nil))
+  ([local-device-id tries {:keys [automatic?]}]
    (loop [remaining-tries tries]
      (when (> remaining-tries 0)
-       (let [ids (find-remote-devices-and-extended-information local-device-id {})]
+       (let [ids (find-remote-devices-and-extended-information local-device-id
+                                                               {:automatic? automatic?})]
          (if (not-empty ids)
            ids
            (recur (dec remaining-tries))))))))
@@ -489,21 +725,63 @@
 ;; One possible approach to solve this would be to have a middleware
 ;; to dispatch the messages to the correct local device.
 
+(def ^:private test-devices-port
+  47555) ; Unlikely to mess with existing BACnet network.
+
+(defn- test-device-ip [device-id]
+  (str "127.0.0." device-id))
+
+(defn- test-devices-know-each-other? [ids]
+  (every? #(= (set (remove #{%} ids))
+              (remote-devices %))
+          ids))
+
 (defn local-registered-test-devices!
   "Boot up local devices and return their IDs.
   The devices are registered as foreign devices to each other."
   [qty]
-  (let [port 47555 ; Unlikely to mess with existing BACnet network.
-        id->ip (into {} (map (juxt :id :ip-address) (ld/local-test-devices! qty port)))
-        know-each-other? (fn [ids]
-                           (every? #(= (set (remove #{%} ids))
-                                       (remote-devices %))
-                                   ids))]
+  (let [port test-devices-port
+        id->ip (into {} (map (juxt :id :ip-address) (ld/local-test-devices! qty port)))]
     ;; Make devices aware of each other
     (doseq [[ld-id _] id->ip] ; current local device
       (doseq [[_ rd-ip] (dissoc id->ip ld-id)] ; all the other devices
         (ld/register-as-foreign-device ld-id rd-ip port 60)))
     (doseq [id (keys id->ip)]
       (ld/i-am-broadcast! id))
-    (util/wait-while #(not (know-each-other? (keys id->ip))) 500)
+    (util/wait-while #(not (test-devices-know-each-other? (keys id->ip))) 500)
     (keys id->ip)))
+
+(defn- register-test-device!
+  "Register a test device as a foreign device of another one,
+  replacing any previous registration."
+  [local-device-id target-id]
+  (ld/unregister-as-foreign-device local-device-id)
+  ;; Bacnet4j can mistake a late answer to the 'unregister' for the
+  ;; answer to the 'register'; try a few times.
+  (loop [tries 10]
+    (when-not (try (ld/register-as-foreign-device local-device-id (test-device-ip target-id)
+                                                  test-devices-port 60)
+                   true
+                   (catch Exception e
+                     (when (= tries 1) (throw e))))
+      (Thread/sleep 100)
+      (recur (dec tries)))))
+
+(defn reset-registered-test-device!
+  "Reset one of the two devices created by
+  `local-registered-test-devices!` and wait until they know each
+  other again.
+
+  A device acts as the BBMD of the devices registered to it and
+  forgets them when it is reset. As for any BBMD restart, the other
+  device must register again, or its broadcasts are refused."
+  [local-device-id other-device-id]
+  (ld/reset-local-device! local-device-id)
+  (register-test-device! local-device-id other-device-id)
+  (register-test-device! other-device-id local-device-id)
+  (util/wait-while #(do (ld/i-am-broadcast! local-device-id)
+                        (ld/i-am-broadcast! other-device-id)
+                        (Thread/sleep 50)
+                        (not (test-devices-know-each-other? [local-device-id other-device-id])))
+                   3000)
+  nil)

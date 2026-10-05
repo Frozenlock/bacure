@@ -2,7 +2,8 @@
   (:require [bacure.coerce :as c]
             [bacure.state :as state]
             [bacure.util :as util])
-  (:import com.serotonin.bacnet4j.event.DeviceEventAdapter))
+  (:import com.serotonin.bacnet4j.event.DeviceEventAdapter
+           com.serotonin.bacnet4j.type.enumerated.PropertyIdentifier))
 
 (def default-cov-process-id 1)
 
@@ -87,14 +88,32 @@
    (state/assoc-in-local-device! local-device-id [:cov-events process-identifier] [])))
 
 ;; Event handlers
-(defn- add-remote-device-to-cache!
-  [local-device-id remote-device]
+(def ^:private i-am-properties
+  "Properties advertised in an I-Am."
+  [PropertyIdentifier/maxApduLengthAccepted
+   PropertyIdentifier/segmentationSupported
+   PropertyIdentifier/vendorIdentifier])
 
+(defn- copy-i-am-data!
+  "Copy the data advertised in an I-Am from one RemoteDevice to another."
+  [from to]
+  (when-let [address (.getAddress from)]
+    (.setAddress to address))
+  (doseq [p-id i-am-properties]
+    (when-let [value (.getDeviceProperty from p-id)]
+      (.setDeviceProperty to p-id value))))
+
+(defn- add-remote-device-to-cache!
+  "Bacnet4j creates a new, empty RemoteDevice for every I-Am it
+  receives. If we already know the device, keep our object (it holds
+  the properties we fetched, such as the services supported and the
+  object-name) and only copy onto it the fresh data from the I-Am."
+  [local-device-id remote-device]
   (let [remote-device-id (.getInstanceNumber remote-device)
-        remote-devices   (-> (cached-remote-devices local-device-id)
-                             (assoc remote-device-id remote-device))]
-    
-    (state/assoc-in-local-device! local-device-id [:remote-devices] remote-devices)))
+        known (state/update-in-local-device! local-device-id [:remote-devices remote-device-id]
+                                             #(or % remote-device))]
+    (when (and known (not (identical? known remote-device)))
+      (copy-i-am-data! remote-device known))))
 
 (defn- add-remote-object-to-cache!
   [local-device-id remote-device remote-object]
@@ -136,7 +155,7 @@
 
     (iHaveReceived [remote-device remote-object]
       (add-remote-object-to-cache! local-device-id remote-device remote-object))
-    
+
     ;; This was useful for debugging, but it's not needed for any features so far
     ;;(requestReceived [from service]
     ;;  (apply prn [(c/bacnet->clojure from) (c/bacnet->clojure service)]))

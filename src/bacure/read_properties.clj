@@ -73,8 +73,8 @@
   "True if the abort reason is size related."
   [read-result]
   (some #{(or (get-in read-result [:abort :abort-reason])
-               (get-in read-result [:reject :reject-reason])
-               (get-in read-result [:error :error-reason]))}
+              (get-in read-result [:reject :reject-reason])
+              (get-in read-result [:error :error-reason]))}
         [:segmentation-not-supported :buffer-overflow :service-too-big]))
 
 (defn read-single-property-with-fallback
@@ -108,7 +108,7 @@
 
 (defn BACnet-array?
   "Return true if the raw data returned by a read property is part of
-  an array."[data]
+  an array." [data]
   (->> (dissoc data :object-identifier) keys first coll?))
 
 (defn assemble-arrays
@@ -127,7 +127,6 @@
              ((fn [x] (if (> (count x) 1) x (first x))))
              ((fn [x] {:object-identifier object-identifier
                        property-type x})))))))
-
 
 (defn read-individually
   "Given a list of object-property-references, return a list of object properties maps.
@@ -156,7 +155,6 @@
          vals
          (map (partial apply merge)))))
 
-
 ;; ================================================================
 ;; ==================  And now read property multiple =============
 ;; ================================================================
@@ -165,7 +163,6 @@
   (let [remote-device (some-> (events/cached-remote-devices local-device-id)
                               (get device-id))]
     (.getMaxReadMultipleReferences remote-device)))
-
 
 (defn partition-object-property-references
   [local-device-id device-id obj-prop-references]
@@ -181,7 +178,6 @@
    (c/clojure->bacnet :sequence-of
                       (mapv (partial c/clojure->bacnet :read-access-specification)
                             obj-prop-references))))
-
 
 (defn read-property-multiple*
   "read-access-specification should be of the form:
@@ -217,7 +213,6 @@
              (map (partial apply merge))
              (hash-map :success)))))
 
-
 (defn split-opr [obj-prop-references]
   (let [qty (count obj-prop-references)]
     (if (> 4 qty)
@@ -225,7 +220,6 @@
       (split-at (/ qty 2) obj-prop-references))))
 
 (declare read-property-multiple)
-
 
 (defn assemble-results
   "For each object-identifier, check if a property is present is
@@ -242,15 +236,12 @@
                       (map #(dissoc % :object-identifier) results))
                :object-identifier oid)))))
 
-
 (defn read-array-in-chunks
   "Read the partitioned arrays in chunks and then assemble them back
   together." [local-device-id device-id partitioned-array]
   (let [read-result (for [opr (split-opr partitioned-array)]
                       (read-property-multiple local-device-id device-id opr))]
     (assemble-results read-result)))
-
-
 
 (defn expand-obj-prop-ref
   "Take a normal object-property-references, such as
@@ -291,7 +282,6 @@
   [coll f]
   (when (coll? coll)
     (f coll)))
-
 
 ;; NOTE: Does not differentiate with a single device-id followed by an array.
 ;; [[[:device 123] [:object-list 1] [:object-list 2] ...]]
@@ -344,25 +334,43 @@
                expand-obj-prop-ref
                (read-individually local-device-id device-id))
 
+          ;; The device doesn't support read-property-multiple after
+          ;; all (despite what it advertised); splitting the request
+          ;; wouldn't help.
+          (= :unrecognized-service (:reject-reason (:reject read-result)))
+          (->> obj-prop-references
+               replace-special-identifier
+               expand-obj-prop-ref
+               (read-individually local-device-id device-id))
 
-          ;; size related for a single object.
+          ;; size related with a special identifier (:all, :required
+          ;; or :optional): replace it by the actual list of
+          ;; properties and try again. (A special identifier can't be
+          ;; split, nor read with a plain read-property.)
+          (and (size-related? read-result)
+               (some #{:all :required :optional} (mapcat rest obj-prop-references)))
+          (read-property-multiple local-device-id device-id
+                                  (replace-special-identifier obj-prop-references))
+
+          ;; size related for a single object and a single property.
           (and
            (size-related? read-result)
-           (= (count obj-prop-references) 1) ;; single property
+           (= (count obj-prop-references) 1) ;; single object
+           (= (count (first obj-prop-references)) 2) ;; single property
            (not expanded-array?)) ;; not an array index
 
           (do (log/warn (str "Error for : " (first obj-prop-references)
                              (size-related? read-result)))
               (log/warn "Trying to read as an array (in chunks).")
               (state/set-request-response! read-result)
-              (let [expanded-array (apply (partial expand-array local-device-id device-id)
-                                          (first obj-prop-references))]
-                (read-array-in-chunks local-device-id device-id expanded-array)))
-
+              (if-let [expanded-array (apply (partial expand-array local-device-id device-id)
+                                             (first obj-prop-references))]
+                (read-array-in-chunks local-device-id device-id expanded-array)
+                ;; Not an array: read it with a plain read-property.
+                (read-individually local-device-id device-id obj-prop-references)))
 
           ;; size related multiple objects or multiple properties
           (or (:split-opr read-result)
-              (= :unrecognized-service (:reject-reason (:reject read-result)))
               (and (size-related? read-result)
                    (or (> (count obj-prop-references) 1) ;; too many objects
                        (> (count (first obj-prop-references)) 2)))) ;; too many properties
@@ -380,24 +388,17 @@
                    (read-property-multiple local-device-id device-id opr))
                  assemble-results))
 
-
           (:timeout read-result)
           (throw (or (some-> read-result :timeout :timeout-error)
                      (Exception. "Timeout")))
-
 
           :else (do (log/error "Read-property-multiple error.")
                     (log/error obj-prop-references)
                     read-result))))))
 
-
 ;; ================================================================
 ;; ===========  Abstract the differences between the two ==========
 ;; ================================================================
-
-
-
-
 
 (defn read-properties
   "Retrieve the property values form a remote device.
@@ -438,7 +439,6 @@
         vector
         (apply (partial read-properties local-device-id device-id)))))
 
-
 ;; ================================================================
 ;; =====================  Read range requests  ====================
 ;; ================================================================
@@ -452,7 +452,6 @@
          ReadRangeRequest$BySequenceNumber
          ReadRangeRequest$ByTime))
 
-
 (defn read-range-request-by [reference range & by-what]
   (condp = (first by-what)
     :sequence (ReadRangeRequest$BySequenceNumber. (c/clojure->bacnet :unsigned-integer reference)
@@ -461,7 +460,6 @@
                                     (c/clojure->bacnet :signed-integer range))
     (ReadRangeRequest$ByPosition. (c/clojure->bacnet :unsigned-integer reference)
                                   (c/clojure->bacnet :signed-integer range)))) ;;default to :position
-
 
 (defn read-range-request
   "'by-what?' can be :sequence, :time, or :position (the default if none is provided)."

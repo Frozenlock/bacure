@@ -41,10 +41,8 @@
   [device-id]
   (state/get-in-local-device device-id [:bacnet4j-local-device]))
 
-
 (defn default-transport [network]
   (DefaultTransport. network))
-
 
 (defn- get-all-device-properties [ldo]
   (-> (into {} (for [p (c-obj/properties-by-option :device :all)]
@@ -90,7 +88,6 @@
     ;; get the newly updated configs
     (get-configs local-device-id)))
 
-
 (def default-configs
   "Some default configurations for device creation."
   {:network-type           :ipv4
@@ -103,6 +100,11 @@
    :vendor-identifier      697
    :apdu-timeout           6000
    :number-of-apdu-retries 2
+   ;; Delay before automatically asking again for the extended
+   ;; information of a device that didn't answer. It grows with each
+   ;; consecutive failure (1x, 2x, 3x...) and never exceeds the maximum.
+   :extended-information-retry-ms     (* 5 60 1000)
+   :extended-information-max-retry-ms (* 15 60 1000)
    :broadcast-address      (net/get-broadcast-address (net/get-any-ip))
    :description            (str "BACnet device running on the open source Bacure stack. "
                                 "See https://github.com/Frozenlock/bacure for details.")
@@ -118,7 +120,7 @@
            :device-id device-id
            :broadcast-address (or (:broadcast-address configs-map)
                                   (net/get-broadcast-address (or (:local-address configs-map) (net/get-any-ip))))
-           :object-name (or (:object-name configs-map) (str "Bacure device "device-id)))))
+           :object-name (or (:object-name configs-map) (str "Bacure device " device-id)))))
 
 (declare terminate!)
 
@@ -129,7 +131,8 @@
       (.setRetries tp retries))
     (when-let [timeout (:apdu-timeout configs-map)]
       (.setTimeout tp timeout))
-    (when-let [seg-timeout (:adpu-seg-timeout configs-map)]
+    (when-let [seg-timeout (or (:apdu-segment-timeout configs-map)
+                               (:adpu-seg-timeout configs-map))] ; legacy (misspelled) key
       (.setSegTimeout tp seg-timeout))
     tp))
 
@@ -171,12 +174,15 @@
      ;; local devices table.
      (state/assoc-local-device! device-id
                                 {:bacnet4j-local-device ld
+                                 ;; Runtime options (functions and such) are not
+                                 ;; part of the saved configs; they survive a reset.
+                                 :runtime-options (:runtime-options (get-local-device device-id))
                                  :serial-connection serial-connection
                                  :remote-devices {}
                                  :remote-objects {}
                                  :cov-events {}
                                  :-threadpool (claypoole/priority-threadpool
-                                               20 :name (str "bacnet-"device-id))
+                                               20 :name (str "bacnet-" device-id))
                                  :init-configs (merge configs
                                                       {:device-id device-id
                                                        :broadcast-address broadcast-address
@@ -256,8 +262,6 @@
            :when (not= (first object-identifier) :device)]
      (remove-object! device-id object-identifier))))
 
-
-
 ;;;;;;
 
 (defn register-as-foreign-device
@@ -301,9 +305,10 @@
     (let [{:keys [host port]} fdt]
       (when (and host port)
         (try
-          (register-as-foreign-device host port 3600)
-          (catch Exception e))))))
-
+          (register-as-foreign-device local-device-id host port 3600)
+          (catch Exception e
+            (log/warn (str "Couldn't register as a foreign device to " host ":" port
+                           " : " (.getMessage e)))))))))
 
 (defn i-am-broadcast!
   "Send an 'I am' broadcast on the network."
@@ -312,7 +317,6 @@
    (let [ldo (local-device-object local-device-id)]
      (->> (.getIAm ldo)
           (.sendGlobalBroadcast ldo)))))
-
 
 (defn initialize!
   "Initialize the local device. This will bind it to it's port (most
@@ -334,7 +338,7 @@
        (let [port (or (:port (get-configs local-device-id)) 47808)
              port-bind (try (do (.initialize ldo) true)
                             (catch java.net.BindException e
-                              (do (log/error (str "The BACnet port ("port") is already bound to another "
+                              (do (log/error (str "The BACnet port (" port ") is already bound to another "
                                                   "software.\n\t Please close the other software and try again.\n"))
                                   (throw e))))]
          ;; once we have the port, load the local programs
@@ -402,8 +406,6 @@
            (assoc :local-objects (->> (local-objects local-device-id)
                                       (remove #(= (:object-type %) :device)))))))
 
-
-
 ;; ;; eventually we should be able to add programs in the local device
 
 (defn reset-local-device!
@@ -449,10 +451,9 @@
   (state/clear-local-devices!))
 
 (defn  save-local-device-backup!
-  "Save the device backup on a local file and return the config map."[]
+  "Save the device backup on a local file and return the config map." []
   (save/save-configs (local-device-backup)))
 ;; eventually it would be nice to implement the BACnet backup procedure.
-
 
 (defn load-local-device-backup!
   "Load the local-device backup file and reset it with this new
@@ -475,7 +476,6 @@
 
 (def disable-communications! (partial set-communication-state! :disable))
 (def enable-communications! (partial set-communication-state! :enable))
-
 
 ;; ================================================================
 ;; Test helpers
@@ -508,7 +508,7 @@
   `remote-device/local-registered-test-devices!` instead."
   [qty port]
   (let [ids-and-addr (for [i (range 1 (inc qty))]
-                       {:id i :ip-address (str "127.0.0."i)})]
+                       {:id i :ip-address (str "127.0.0." i)})]
     (doseq [m ids-and-addr]
       (let [id (:id m)]
         (new-local-device!

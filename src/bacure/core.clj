@@ -7,18 +7,30 @@
 
 (defn boot-up!
   "Create a local-device, load its config file, initialize it, and
-  find the remote devices. Return device-id."
+  find the remote devices. Return device-id.
+
+  'runtime-options' are options that can't be saved in the config
+  file. If a key is not provided, its current value (if any) is kept.
+
+  :auto-fetch-filter - Function of a remote device ID; when it returns
+                       false, we don't fetch the extended information
+                       of this device on our own.
+                       See `bacure.remote-device/set-auto-fetch-filter!`."
   ([] (boot-up! nil))
-  ([configs]
+  ([configs] (boot-up! configs nil))
+  ([configs runtime-options]
    (let [device-id (:device-id configs)
          _ (ld/load-local-device-backup! device-id configs)
          device-id (or device-id (get-in (ld/get-local-device nil)
                                          [:init-configs :device-id]))]
      (ld/maybe-register-as-foreign-device! device-id)
+     ;; The filter must be in place before we start fetching.
+     (when (contains? runtime-options :auto-fetch-filter)
+       (rd/set-auto-fetch-filter! device-id (:auto-fetch-filter runtime-options)))
      ;; automatically fetch extended info when receiving a IAm
      (->> (rd/IAm-received-auto-fetch-extended-information device-id)
           (ld/add-listener! device-id))
-     (future (rd/discover-network device-id))
+     (future (rd/discover-network device-id 5 {:automatic? true}))
      device-id)))
 
 (defn find-bacnet-port

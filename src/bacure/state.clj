@@ -36,6 +36,23 @@
     (swap! state assoc-in ks v))
   v)
 
+(defn- update-in-value!
+  "Atomically update the value at 'sub-ks' with (apply f old-value args).
+  Return the new value at 'sub-ks'.
+
+  Does nothing (and returns nil) if 'k' is not in the state: a late
+  update must not resurrect something that was removed.
+
+  As with `swap!`, 'f' may be called multiple times and must be free
+  of side effects."
+  [state k sub-ks f & args]
+  (let [k  (get-key state k)
+        ks (cons k sub-ks)]
+    (-> (swap! state #(if (contains? % k)
+                        (apply update-in % ks f args)
+                        %))
+        (get-in ks))))
+
 (defn- dissoc-value!
   [state k]
 
@@ -70,6 +87,13 @@
   "Set the value"
   [device-id ks v]
   (assoc-in-value! local-devices device-id ks v))
+
+(defn update-in-local-device!
+  "Atomically update the value at 'ks' with (apply f old-value args).
+  Return the new value at 'ks'. Does nothing if the local device
+  doesn't exist. 'f' must be free of side effects."
+  [device-id ks f & args]
+  (apply update-in-value! local-devices device-id ks f args))
 
 (defn assoc-local-device!
   "Assoc a local device with the given key"
