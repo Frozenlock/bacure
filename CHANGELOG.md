@@ -1,6 +1,28 @@
 # Changelog
 ## Unreleased
 
+## [1.3.3] - 2026-10-04
+Reduces the traffic generated on networks where another device frequently sends `Who-Is`.
+
+- Fix remote devices losing their extended information (services supported, object-name...) on every I-Am, which was then read again from the device each time.
+- Fix remote devices that could be dropped from the cache when many I-Ams were received simultaneously.
+- Extended information:
+  - It is complete when we have the services supported and the object-name. `extended-information` now tries to complete partial information (it could return it immediately before) and returns what was learned before a failure.
+  - Only one fetch at a time per remote device; concurrent callers wait and share the result.
+  - `retrieve-extended-information!` still reads everything again.
+- What bacure fetches on its own (when receiving an I-Am and during the discovery of `boot-up!`) is now restrained. Explicit calls (`extended-information`, `discover-network`) are not affected.
+  - A device that doesn't answer is not asked again right away. New local device configs: `:extended-information-retry-ms` (default 300000), multiplied by the number of consecutive failures, up to `:extended-information-max-retry-ms` (default 900000).
+  - New optional filter (function of the remote device ID): `bacure.remote-device/set-auto-fetch-filter!`, or `(boot-up! configs {:auto-fetch-filter f})`. It is not saved with the configs and survives a reset of the local device. Filtered devices are still listed in the remote devices.
+  - `(discover-network id tries {:automatic? true})` applies the same restrictions.
+- `read-property-multiple` fallbacks:
+  - Fix infinite recursion when a device rejects the request as `:unrecognized-service` for a single property; the properties are now read individually.
+  - Fix a size-related error on a single object with multiple properties being handled as an array.
+  - A size-related error with `:all`, `:required` or `:optional` is retried with the actual list of properties. (This list comes from the standard object definitions: proprietary properties are not included.)
+  - A size-related error on a property that isn't an array falls back to a plain read-property.
+- The config `:apdu-segment-timeout` is now applied (the misspelled `:adpu-seg-timeout` is still accepted).
+- Fix `maybe-register-as-foreign-device!` registering the default local device instead of the given one; a failed registration is now logged.
+- Add `reset-registered-test-device!` as a public test helper.
+
 ## [1.3.2] - 2026-02-09
 - Fix thread leak in `send-request-promise`: cancel timeout future when response arrives.
 - Fix `local-device-id` not passed to inner function calls in `remote-devices-and-names`, `remote-objects-all-properties`, `read-trend-log`, and `set-remote-properties!`.
